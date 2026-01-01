@@ -1,6 +1,7 @@
 -- =====================================================
 -- Asmelit EEPROM Flasher
 -- Прошивает наш загрузчик в EEPROM
+-- ВЕРСИЯ 2.0 - с проверкой размера и защитой от ошибок
 -- =====================================================
 
 local component = require("component")
@@ -29,7 +30,7 @@ term.clear()
 
 local maxWidth, maxHeight = gpu.getResolution()
 local centerX = math.floor(maxWidth / 2)
-local centerY = math.floor(maxHeight / 2)  -- ИСПРАВЛЕНИЕ 1: добавляем centerY
+local centerY = math.floor(maxHeight / 2)
 
 -- Варианты прошивки
 local options = {
@@ -66,7 +67,6 @@ while true do
     local label = eeprom.getLabel() or "Без метки"
     gpu.set(centerX - 15, maxHeight - 5, "EEPROM: " .. label)
     
-    -- ИСПРАВЛЕНИЕ 2: безопасный подсчет размера
     local eepromCode = eeprom.get() or ""
     gpu.set(centerX - 15, maxHeight - 4, "Размер: " .. #eepromCode .. " байт")
 
@@ -94,26 +94,72 @@ while true do
                     gpu.setForeground(0x00FF00)
                     term.clear()
                     gpu.set(centerX - 15, centerY, "Скачиваю прошивку...")
-
+                    
+                    -- Критически важный блок: проверка размера при скачивании
                     local handle, err = internet.request(BOOTLOADER_URL)
                     if handle then
                         local code = ""
+                        local chunks = 0
+                        local totalSize = 0
+                        
                         for chunk in handle do
                             code = code .. chunk
+                            chunks = chunks + 1
+                            totalSize = totalSize + #chunk
+                            
+                            -- Проверяем размер ПО ХОДУ скачивания
+                            if #code > 4096 then
+                                gpu.setForeground(0xFF0000)
+                                gpu.set(centerX - 20, centerY + 2, 
+                                        "ОШИБКА: Файл слишком большой для EEPROM!")
+                                gpu.set(centerX - 20, centerY + 3, 
+                                        "Скачано: " .. #code .. " байт, лимит: 4096")
+                                gpu.set(centerX - 20, centerY + 5, 
+                                        "Нажмите любую клавишу...")
+                                event.pull("key_down")
+                                code = nil  -- Освобождаем память
+                                break
+                            end
+                            
+                            -- Даём системе передышку при больших файлах
+                            if chunks % 5 == 0 then
+                                os.sleep(0.05)
+                                gpu.set(centerX - 15, centerY + 1, 
+                                        "Скачано: " .. #code .. " байт")
+                            end
                         end
-
-                        gpu.set(centerX - 15, centerY + 2, "Прошиваю EEPROM...")
-
-                        -- Прошиваем EEPROM
-                        eeprom.set(code)
-                        eeprom.setLabel("Asmelit BIOS")
-
-                        gpu.setForeground(0x00FF00)
-                        gpu.set(centerX - 15, centerY + 4, "УСПЕХ! EEPROM прошит")
-                        gpu.set(centerX - 15, centerY + 5, "Размер: " .. #code .. " байт")
+                        
+                        -- Если код не был слишком большим
+                        if code and #code > 0 then
+                            if #code <= 4096 then
+                                gpu.set(centerX - 15, centerY + 2, "Прошиваю EEPROM...")
+                                
+                                -- ПРОШИВКА EEPROM
+                                local success, err = pcall(function()
+                                    eeprom.set(code)
+                                    eeprom.setLabel("Asmelit BIOS")
+                                end)
+                                
+                                if success then
+                                    gpu.setForeground(0x00FF00)
+                                    gpu.set(centerX - 15, centerY + 4, "УСПЕХ! EEPROM прошит")
+                                    gpu.set(centerX - 15, centerY + 5, 
+                                            "Размер: " .. #code .. " байт")
+                                else
+                                    gpu.setForeground(0xFF0000)
+                                    gpu.set(centerX - 15, centerY + 4, 
+                                            "ОШИБКА прошивки: " .. tostring(err))
+                                end
+                            else
+                                gpu.setForeground(0xFF0000)
+                                gpu.set(centerX - 15, centerY + 2, 
+                                        "ОШИБКА: Файл больше 4096 байт!")
+                            end
+                        end
                     else
                         gpu.setForeground(0xFF0000)
-                        gpu.set(centerX - 15, centerY + 2, "ОШИБКА: " .. (err or "неизвестно"))
+                        gpu.set(centerX - 15, centerY + 2, 
+                                "ОШИБКА скачивания: " .. (err or "неизвестно"))
                     end
 
                     gpu.set(centerX - 15, centerY + 7, "Нажмите любую клавишу...")
@@ -139,13 +185,23 @@ while true do
                     local file = io.open(path, "r")
                     local code = file:read("*a")
                     file:close()
+                    
+                    -- Проверка размера файла
+                    if #code <= 4096 then
+                        eeprom.set(code)
+                        eeprom.setLabel("Asmelit BIOS")
 
-                    eeprom.set(code)
-                    eeprom.setLabel("Asmelit BIOS")
-
-                    gpu.setForeground(0x00FF00)
-                    gpu.set(centerX - 15, centerY + 3, "EEPROM прошит успешно!")
-                    gpu.set(centerX - 15, centerY + 4, "Нажмите любую клавишу...")
+                        gpu.setForeground(0x00FF00)
+                        gpu.set(centerX - 15, centerY + 3, "EEPROM прошит успешно!")
+                        gpu.set(centerX - 15, centerY + 4, 
+                                "Размер: " .. #code .. " байт")
+                    else
+                        gpu.setForeground(0xFF0000)
+                        gpu.set(centerX - 15, centerY + 3, 
+                                "Файл слишком большой! (" .. #code .. " > 4096 байт)")
+                    end
+                    
+                    gpu.set(centerX - 15, centerY + 5, "Нажмите любую клавишу...")
                     event.pull("key_down")
                 else
                     gpu.setForeground(0xFF0000)
@@ -165,8 +221,13 @@ while true do
                 gpu.set(1, 1, "EEPROM информация:")
                 gpu.set(1, 3, "Метка: " .. label)
                 gpu.set(1, 4, "Размер: " .. #code .. " байт")
-                gpu.set(1, 6, "Первые 500 символов:")
-                gpu.set(1, 7, code:sub(1, 500))
+                gpu.set(1, 6, "Лимит EEPROM: 4096 байт")
+                gpu.set(1, 7, "Свободно: " .. (4096 - #code) .. " байт")
+                
+                if #code > 0 then
+                    gpu.set(1, 9, "Первые 500 символов:")
+                    gpu.set(1, 10, code:sub(1, 500))
+                end
 
                 gpu.set(1, maxHeight - 1, "Нажмите любую клавишу...")
                 event.pull("key_down")
@@ -176,6 +237,9 @@ while true do
                 eeprom.set("")
                 eeprom.setLabel("")
                 computer.beep(500, 1)
+                gpu.setForeground(0x00FF00)
+                gpu.set(centerX - 10, centerY, "EEPROM очищен!")
+                os.sleep(1)
 
             elseif action == "exit" then
                 computer.shutdown()
