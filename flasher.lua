@@ -29,9 +29,7 @@ term.clear()
 
 local maxWidth, maxHeight = gpu.getResolution()
 local centerX = math.floor(maxWidth / 2)
-
-gpu.set(centerX - 10, 3, "ASMELIT EEPROM FLASHER")
-gpu.set(centerX - 20, 5, "=" .. string.rep("=", 40) .. "=")
+local centerY = math.floor(maxHeight / 2)  -- ИСПРАВЛЕНИЕ 1: добавляем centerY
 
 -- Варианты прошивки
 local options = {
@@ -56,26 +54,29 @@ while true do
             gpu.setBackground(0x000033)
             gpu.setForeground(0xFFFFFF)
         end
-        
+
         gpu.fill(centerX - 25, y, 50, 1, " ")
         gpu.set(centerX - 23, y, (i == selected and "▶ " or "  ") .. option.text)
         y = y + 2
     end
-    
+
     -- Статус EEPROM
     gpu.setBackground(0x000033)
     gpu.setForeground(0xAAAAAA)
     local label = eeprom.getLabel() or "Без метки"
     gpu.set(centerX - 15, maxHeight - 5, "EEPROM: " .. label)
-    gpu.set(centerX - 15, maxHeight - 4, "Размер: " .. #(eeprom.get() or "") .. " байт")
     
+    -- ИСПРАВЛЕНИЕ 2: безопасный подсчет размера
+    local eepromCode = eeprom.get() or ""
+    gpu.set(centerX - 15, maxHeight - 4, "Размер: " .. #eepromCode .. " байт")
+
     -- Подсказка
     local help = "↑↓ - Выбор | Enter - Подтвердить | ESC - Выход"
     gpu.set(centerX - math.floor(#help / 2), maxHeight - 2, help)
-    
+
     -- Обработка ввода
     local eventType, _, char, code = event.pull()
-    
+
     if eventType == "key_down" then
         if code == 200 then -- Up
             selected = selected > 1 and selected - 1 or #options
@@ -83,30 +84,30 @@ while true do
             selected = selected < #options and selected + 1 or 1
         elseif code == 28 then -- Enter
             local action = options[selected].action
-            
+
             if action == "flash_online" then
                 -- Скачивание с GitHub
                 if component.isAvailable("internet") then
                     local internet = require("internet")
-                    
+
                     gpu.setBackground(0x000033)
                     gpu.setForeground(0x00FF00)
                     term.clear()
                     gpu.set(centerX - 15, centerY, "Скачиваю прошивку...")
-                    
+
                     local handle, err = internet.request(BOOTLOADER_URL)
                     if handle then
                         local code = ""
                         for chunk in handle do
                             code = code .. chunk
                         end
-                        
+
                         gpu.set(centerX - 15, centerY + 2, "Прошиваю EEPROM...")
-                        
+
                         -- Прошиваем EEPROM
                         eeprom.set(code)
                         eeprom.setLabel("Asmelit BIOS")
-                        
+
                         gpu.setForeground(0x00FF00)
                         gpu.set(centerX - 15, centerY + 4, "УСПЕХ! EEPROM прошит")
                         gpu.set(centerX - 15, centerY + 5, "Размер: " .. #code .. " байт")
@@ -114,7 +115,7 @@ while true do
                         gpu.setForeground(0xFF0000)
                         gpu.set(centerX - 15, centerY + 2, "ОШИБКА: " .. (err or "неизвестно"))
                     end
-                    
+
                     gpu.set(centerX - 15, centerY + 7, "Нажмите любую клавишу...")
                     event.pull("key_down")
                 else
@@ -124,7 +125,7 @@ while true do
                     gpu.set(centerX - 15, centerY, "ОШИБКА: Нет интернет-карты!")
                     os.sleep(3)
                 end
-                
+
             elseif action == "flash_file" then
                 -- Прошивка из файла
                 gpu.setBackground(0x000033)
@@ -132,16 +133,16 @@ while true do
                 term.clear()
                 gpu.set(centerX - 15, centerY, "Введите путь к файлу:")
                 gpu.set(centerX - 15, centerY + 1, "> ")
-                
+
                 local path = io.read()
                 if fs.exists(path) then
                     local file = io.open(path, "r")
                     local code = file:read("*a")
                     file:close()
-                    
+
                     eeprom.set(code)
                     eeprom.setLabel("Asmelit BIOS")
-                    
+
                     gpu.setForeground(0x00FF00)
                     gpu.set(centerX - 15, centerY + 3, "EEPROM прошит успешно!")
                     gpu.set(centerX - 15, centerY + 4, "Нажмите любую клавишу...")
@@ -151,40 +152,40 @@ while true do
                     gpu.set(centerX - 15, centerY + 3, "Файл не найден!")
                     os.sleep(2)
                 end
-                
+
             elseif action == "read" then
                 -- Чтение EEPROM
-                local code = eeprom.get()
-                local label = eeprom.getLabel()
-                
+                local code = eeprom.get() or ""
+                local label = eeprom.getLabel() or "нет"
+
                 gpu.setBackground(0x000033)
                 gpu.setForeground(0xFFFFFF)
                 term.clear()
-                
+
                 gpu.set(1, 1, "EEPROM информация:")
-                gpu.set(1, 3, "Метка: " .. (label or "нет"))
+                gpu.set(1, 3, "Метка: " .. label)
                 gpu.set(1, 4, "Размер: " .. #code .. " байт")
                 gpu.set(1, 6, "Первые 500 символов:")
                 gpu.set(1, 7, code:sub(1, 500))
-                
+
                 gpu.set(1, maxHeight - 1, "Нажмите любую клавишу...")
                 event.pull("key_down")
-                
+
             elseif action == "clear" then
                 -- Очистка EEPROM
                 eeprom.set("")
                 eeprom.setLabel("")
                 computer.beep(500, 1)
-                
+
             elseif action == "exit" then
                 computer.shutdown()
             end
-            
+
             -- После действия перерисовываем
             gpu.setBackground(0x000033)
             gpu.setForeground(0xFFFFFF)
             term.clear()
-            
+
         elseif code == 1 then -- ESC
             computer.shutdown()
         end
