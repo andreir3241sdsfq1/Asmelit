@@ -1,124 +1,65 @@
--- =====================================================
--- Asmelit MINIMAL BIOS Bootloader
--- ЗАГРУЗЧИК ДЛЯ EEPROM (работает до загрузки библиотек)
--- =====================================================
+-- Asmelit BIOS v1.0 (ULTRA-MINIMAL)
 
--- В EEPROM require() недоступен! Используем component.* напрямую
-local component = _G.component or _G.components
-local computer = _G.computer
-local event = _G.event
+local c = _G.component
+local comp = _G.computer
 
--- 1. Инициализация самого необходимого
-if not component then
-    -- Если даже component нет, показываем ошибку и ждем
-    _G.print = _G.print or function(...)
-        local args = {...}
-        for i=1, #args do
-            io.write(tostring(args[i]) .. (i < #args and "\t" or "\n"))
-        end
-    end
-    
-    print("ERROR: No component API")
-    print("Wait for key...")
-    if event then
-        event.pull("key_down")
-    end
+-- 1. Инициализация (5 строк)
+if not c then
+    comp.beep(1000, 1)
+    comp.shutdown(true)
     return
 end
 
--- 2. Ищем диск с ОС
-local function findOSDisk()
-    -- Ищем через низкоуровневый доступ к компонентам
-    local disks = component.list("drive")()
+-- 2. Очистка экрана (3 строки)
+local g = c.gpu
+if g then
+    g.setBackground(0x000000)
+    g.fill(1, 1, 80, 25, " ")
+    g.set(35, 1, "[ BIOS ]")
+end
+
+-- 3. Поиск ОС (8 строк)
+local function boot()
+    local disks = c.list("drive")()
     if disks then
-        -- Монтируем первый диск
-        local addr, type = disks()
-        if addr then
-            -- Пытаемся прочитать startup.lua
-            local proxy = component.proxy(addr)
-            if proxy and proxy.read then
-                -- Читаем сектор
-                local data = proxy.read(0) -- или другой метод чтения
-                if data then
-                    return data
+        for addr in disks do
+            local proxy = c.proxy(addr)
+            if proxy and proxy.exists and proxy.exists("/startup.lua") then
+                local file = proxy.open("/startup.lua", "r")
+                if file then
+                    local code = file.read(math.huge) -- читаем всё
+                    file.close()
+                    if code and #code > 10 then
+                        local ok, err = load(code, "=boot")
+                        if ok then ok() end
+                    end
                 end
             end
         end
     end
-    return nil
 end
 
--- 3. Основная загрузка
-function main()
-    -- Минимальный вывод
-    local gpu = component.gpu
-    if gpu then
-        gpu.set(1, 1, "Asmelit BIOS v1.0")
-        gpu.set(1, 2, "Memory: " .. (computer and computer.totalMemory() or "unknown"))
+-- 4. Меню (10 строк)
+function menu()
+    if g then
+        g.set(30, 10, "1. Boot from disk")
+        g.set(30, 11, "2. Reboot")
     else
-        print("Asmelit BIOS v1.0")
+        print("1. Boot\n2. Reboot")
     end
     
-    -- Ищем ОС
-    local osCode = findOSDisk()
-    
-    if not osCode then
-        -- Нет ОС - показываем меню
-        if gpu then
-            gpu.set(1, 4, "No OS found!")
-            gpu.set(1, 5, "F1 - Install from internet")
-            gpu.set(1, 6, "F2 - Boot from floppy")
+    local e = {_G.event.pull()}
+    if e[1] == "key_down" then
+        if e[4] == 2 then -- '1'
+            boot()
         else
-            print("No OS found!")
-            print("F1 - Install from internet")
-            print("F2 - Boot from floppy")
+            comp.shutdown(true)
         end
-        
-        -- Ждём выбора
-        local _, _, _, code = event.pull("key_down")
-        
-        if code == 59 then -- F1
-            installFromInternet()
-        else
-            computer.shutdown(true)
-        end
-    else
-        -- ОС найдена - запускаем
-        if gpu then gpu.set(1, 4, "Loading OS...") end
-        load(osCode)()
     end
 end
 
--- 4. Установка через интернет (только если есть карта)
-function installFromInternet()
-    local internet = component.internet
-    if not internet then
-        if gpu then
-            gpu.set(1, 8, "No internet card!")
-        else
-            print("No internet card!")
-        end
-        event.pull(3)
-        return
-    end
-    
-    -- Здесь код скачивания
-    -- Но в EEPROM это сложно, лучше оставить минимальный BIOS
-    if gpu then
-        gpu.set(1, 8, "Install via flasher.lua")
-    end
-end
-
--- 5. Запускаем с защитой
-local ok, err = pcall(main)
-if not ok then
-    -- Минимальный вывод ошибки
-    if gpu then
-        gpu.set(1, 10, "BIOS ERROR: " .. tostring(err))
-    else
-        print("BIOS ERROR: " .. tostring(err))
-    end
-    event.pull(5)
-end
-
-computer.shutdown(true)
+-- 5. Запуск (3 строки)
+local ok, err = pcall(menu)
+if not ok and g then g.set(1, 20, "Err:" .. tostring(err):sub(1, 30)) end
+_G.event.pull(3)
+comp.shutdown(true)
