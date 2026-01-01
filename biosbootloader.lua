@@ -1,65 +1,61 @@
--- Asmelit BIOS v1.0 (ULTRA-MINIMAL)
-
 local c = _G.component
 local comp = _G.computer
+local g = c and c.gpu
+local e = _G.event
 
--- 1. Инициализация (5 строк)
-if not c then
-    comp.beep(1000, 1)
-    comp.shutdown(true)
-    return
-end
-
--- 2. Очистка экрана (3 строки)
-local g = c.gpu
 if g then
     g.setBackground(0x000000)
     g.fill(1, 1, 80, 25, " ")
-    g.set(35, 1, "[ BIOS ]")
+    g.setForeground(0x00AA00)
+    g.set(35, 1, "[Asmelit BIOS]")
 end
 
--- 3. Поиск ОС (8 строк)
-local function boot()
-    local disks = c.list("drive")()
-    if disks then
-        for addr in disks do
-            local proxy = c.proxy(addr)
-            if proxy and proxy.exists and proxy.exists("/startup.lua") then
-                local file = proxy.open("/startup.lua", "r")
-                if file then
-                    local code = file.read(math.huge) -- читаем всё
-                    file.close()
-                    if code and #code > 10 then
-                        local ok, err = load(code, "=boot")
-                        if ok then ok() end
+local function findAndRun()
+    local drives = c.list("drive")()
+    if not drives then
+        if g then g.set(1, 3, "No drives") end
+        return false
+    end
+    
+    for addr in drives do
+        local drive = c.proxy(addr)
+        if drive and drive.exists then
+            local paths = {"/bootloader.lua", "/startup.lua", "/home/startup.lua"}
+            for _, path in ipairs(paths) do
+                if drive.exists(path) then
+                    local f = drive.open(path, "r")
+                    if f then
+                        local code = f.read(math.huge)
+                        f.close()
+                        if code and #code > 10 then
+                            local func, err = load(code, "=boot")
+                            if func then
+                                if g then g.set(1, 5, "Booting...") end
+                                return func()
+                            end
+                        end
                     end
                 end
             end
         end
     end
+    return false
 end
 
--- 4. Меню (10 строк)
-function menu()
+local booted = false
+for i = 1, 30 do
+    if findAndRun() then
+        booted = true
+        break
+    end
+    e.pull(0.1)
+end
+
+if not booted then
     if g then
-        g.set(30, 10, "1. Boot from disk")
-        g.set(30, 11, "2. Reboot")
-    else
-        print("1. Boot\n2. Reboot")
+        g.set(1, 10, "Press any key for shell...")
+        g.setForeground(0xFFFFFF)
     end
-    
-    local e = {_G.event.pull()}
-    if e[1] == "key_down" then
-        if e[4] == 2 then -- '1'
-            boot()
-        else
-            comp.shutdown(true)
-        end
-    end
+    e.pull("key_down")
+    require("shell").execute()
 end
-
--- 5. Запуск (3 строки)
-local ok, err = pcall(menu)
-if not ok and g then g.set(1, 20, "Err:" .. tostring(err):sub(1, 30)) end
-_G.event.pull(3)
-comp.shutdown(true)
