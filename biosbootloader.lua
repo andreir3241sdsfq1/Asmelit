@@ -57,6 +57,11 @@ if not booted then
         g.setForeground(0xFFFFFF)
     end
     if ev then ev.pull("key_down") end
-    local sh = require("shell")
-    if sh then sh.execute() end
+    
+    if g then
+        g.set(1, 12, "Cannot load shell")
+        g.set(1, 13, "Rebooting...")
+    end
+    comp.beep(1000, 1)
+    comp.shutdown(true)
 end
