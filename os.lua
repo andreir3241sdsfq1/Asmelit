@@ -41,42 +41,42 @@ local appsToDownload = {
         name = "Калькулятор",
         url = "https://raw.githubusercontent.com/andreir3241sdsfq1/Asmelit/refs/heads/main/calculator.lua",
         filename = "calculator.lua",
-        icon = "🧮",
+        icon = "C",
         key = "1"
     },
     {
         name = "Редактор", 
         url = "https://raw.githubusercontent.com/andreir3241sdsfq1/Asmelit/refs/heads/main/editor.lua",
         filename = "editor.lua",
-        icon = "📝",
+        icon = "E",
         key = "2"
     },
     {
         name = "Браузер",
         url = "https://raw.githubusercontent.com/andreir3241sdsfq1/Asmelit/refs/heads/main/browser.lua",
         filename = "browser.lua",
-        icon = "🌐",
+        icon = "B",
         key = "3"
     },
     {
         name = "Монитор",
         url = "https://raw.githubusercontent.com/andreir3241sdsfq1/Asmelit/refs/heads/main/monitor.lua",
         filename = "monitor.lua",
-        icon = "📊",
+        icon = "M",
         key = "4"
     },
     {
-        name = "Сапёр",
+        name = "Сапер",
         url = "https://raw.githubusercontent.com/andreir3241sdsfq1/Asmelit/refs/heads/main/sapper.lua",
         filename = "sapper.lua",
-        icon = "💣",
+        icon = "S",
         key = "5"
     },
     {
         name = "Змейка",
         url = "https://raw.githubusercontent.com/andreir3241sdsfq1/Asmelit/refs/heads/main/snake.lua",
         filename = "snake.lua",
-        icon = "🐍",
+        icon = "Z",
         key = "6"
     }
 }
@@ -117,17 +117,17 @@ function showYesNoMessage(text, title)
     gpu.fill(winX, winY, winWidth, winHeight, " ")
     
     gpu.setForeground(theme.accent)
-    gpu.set(winX, winY, "╔" .. string.rep("═", winWidth - 2) .. "╗")
-    gpu.set(winX, winY + winHeight - 1, "╚" .. string.rep("═", winWidth - 2) .. "╝")
+    gpu.set(winX, winY, "+" .. string.rep("-", winWidth - 2) .. "+")
+    gpu.set(winX, winY + winHeight - 1, "+" .. string.rep("-", winWidth - 2) .. "+")
     for i = 1, winHeight - 2 do
-        gpu.set(winX, winY + i, "║")
-        gpu.set(winX + winWidth - 1, winY + i, "║")
+        gpu.set(winX, winY + i, "|")
+        gpu.set(winX + winWidth - 1, winY + i, "|")
     end
     
     local titleX = winX + math.floor((winWidth - #title) / 2)
     gpu.set(titleX, winY + 1, title)
     
-    gpu.set(winX, winY + 2, "╠" .. string.rep("═", winWidth - 2) .. "╣")
+    gpu.set(winX, winY + 2, "+" .. string.rep("-", winWidth - 2) .. "+")
     
     gpu.setForeground(theme.text)
     for i, line in ipairs(lines) do
@@ -217,17 +217,17 @@ function showMessage(text, color, title)
     gpu.fill(winX, winY, winWidth, winHeight, " ")
     
     gpu.setForeground(theme.accent)
-    gpu.set(winX, winY, "╔" .. string.rep("═", winWidth - 2) .. "╗")
-    gpu.set(winX, winY + winHeight - 1, "╚" .. string.rep("═", winWidth - 2) .. "╝")
+    gpu.set(winX, winY, "+" .. string.rep("-", winWidth - 2) .. "+")
+    gpu.set(winX, winY + winHeight - 1, "+" .. string.rep("-", winWidth - 2) .. "+")
     for i = 1, winHeight - 2 do
-        gpu.set(winX, winY + i, "║")
-        gpu.set(winX + winWidth - 1, winY + i, "║")
+        gpu.set(winX, winY + i, "|")
+        gpu.set(winX + winWidth - 1, winY + i, "|")
     end
     
     local titleX = winX + math.floor((winWidth - #title) / 2)
     gpu.set(titleX, winY + 1, title)
     
-    gpu.set(winX, winY + 2, "╠" .. string.rep("═", winWidth - 2) .. "╣")
+    gpu.set(winX, winY + 2, "+" .. string.rep("-", winWidth - 2) .. "+")
     
     gpu.setForeground(color)
     for i, line in ipairs(lines) do
@@ -302,7 +302,7 @@ function textEditor(filename)
         gpu.setBackground(theme.header)
         gpu.fill(1, 1, maxWidth, 2, " ")
         gpu.setForeground(theme.accent)
-        local status = modified and "● " or "  "
+        local status = modified and "* " or "  "
         gpu.set(3, 1, status .. "Редактор: " .. filename)
         gpu.set(maxWidth - 15, 1, "Ctrl+S Сохранить")
         gpu.set(maxWidth - 15, 2, "Ctrl+Q Выход")
@@ -542,10 +542,10 @@ function downloadAllApps()
     gpu.setForeground(theme.accent)
     term.clear()
     
-    gpu.set(centerX - 12, 3, "╔══════════════════════════╗")
-    gpu.set(centerX - 12, 4, "║   ЗАГРУЗКА ПРИЛОЖЕНИЙ   ║")
-    gpu.set(centerX - 12, 5, "║      Asmelit OS v4.3     ║")
-    gpu.set(centerX - 12, 6, "╚══════════════════════════╝")
+    gpu.set(centerX - 12, 3, "+---------------------------+")
+    gpu.set(centerX - 12, 4, "|   ЗАГРУЗКА ПРИЛОЖЕНИЙ   |")
+    gpu.set(centerX - 12, 5, "|      Asmelit OS v4.3     |")
+    gpu.set(centerX - 12, 6, "+---------------------------+")
     
     gpu.setForeground(theme.text)
     gpu.set(centerX - 18, 8, "Загружаю приложения с GitHub...")
@@ -558,12 +558,12 @@ function downloadAllApps()
     local barY = 11
     
     gpu.setBackground(0x333333)
-    gpu.fill(barX, barY, barWidth, 1, "█")
+    gpu.fill(barX, barY, barWidth, 1, "#")
     
     for i, app in ipairs(appsToDownload) do
         local progress = math.floor((i / #appsToDownload) * barWidth)
         gpu.setBackground(theme.highlight)
-        gpu.fill(barX, barY, progress, 1, "█")
+        gpu.fill(barX, barY, progress, 1, "#")
         
         gpu.setBackground(0x000000)
         gpu.setForeground(theme.text)
@@ -578,12 +578,12 @@ function downloadAllApps()
         if success then
             downloaded = downloaded + 1
             gpu.setForeground(theme.success)
-            gpu.set(centerX - 5, 16, "✓ Успешно")
+            gpu.set(centerX - 5, 16, "[OK] Успешно")
             log("Загружено приложение: " .. app.name)
         else
             failed = failed + 1
             gpu.setForeground(theme.error)
-            gpu.set(centerX - 5, 16, "✗ Ошибка")
+            gpu.set(centerX - 5, 16, "[X] Ошибка")
             log("Ошибка загрузки " .. app.name .. ": " .. message)
         end
         
@@ -631,7 +631,7 @@ function checkAndLoadApps()
         if component.isAvailable("internet") then
             local missingText = "Отсутствуют приложения:\n"
             for _, appName in ipairs(missingApps) do
-                missingText = missingText .. "• " .. appName .. "\n"
+                missingText = missingText .. "- " .. appName .. "\n"
             end
             
             if showYesNoMessage(missingText .. "\nЗагрузить приложения с GitHub?", "Обнаружены отсутствующие приложения") then
@@ -657,16 +657,12 @@ function bootScreen()
     term.clear()
     
     local logoText = [[
-╔══════════════════════════════════════╗
-║        █████╗ ███████╗███╗   ███╗   ║
-║       ██╔══██╗██╔════╝████╗ ████║   ║
-║       ███████║███████╗██╔████╔██║   ║
-║       ██╔══██║╚════██║██║╚██╔╝██║   ║
-║       ██║  ██║███████║██║ ╚═╝ ██║   ║
-║       ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝   ║
-║                                      ║
-║           ASMELIT OS v4.3            ║
-╚══════════════════════════════════════╝
++--------------------------------------+
+|        ASMELIT OS v4.3              |
+|        ---------------              |
+|                                      |
+|        Система загружается...        |
++--------------------------------------+
 ]]
     
     if fs.exists("/logo.lua") then
@@ -704,7 +700,7 @@ function bootScreen()
         
         gpu.setBackground(theme.sidebar)
         gpu.setForeground(theme.sidebar)
-        gpu.fill(barX, barY, barWidth, 1, "█")
+        gpu.fill(barX, barY, barWidth, 1, "#")
         
         local phases = {"Инициализация...", "Загрузка ядра...", "Настройка интерфейса...", "Готово!"}
         
@@ -717,7 +713,7 @@ function bootScreen()
             
             gpu.setBackground(color)
             gpu.setForeground(color)
-            gpu.set(barX + i - 1, barY, "█")
+            gpu.set(barX + i - 1, barY, "#")
             
             local phaseIndex = math.floor(progress * #phases) + 1
             if phaseIndex <= #phases then
@@ -755,17 +751,17 @@ function inputDialog(prompt, title)
     gpu.fill(winX, winY, winWidth, winHeight, " ")
     
     gpu.setForeground(theme.accent)
-    gpu.set(winX, winY, "╔" .. string.rep("═", winWidth - 2) .. "╗")
-    gpu.set(winX, winY + winHeight - 1, "╚" .. string.rep("═", winWidth - 2) .. "╝")
+    gpu.set(winX, winY, "+" .. string.rep("-", winWidth - 2) .. "+")
+    gpu.set(winX, winY + winHeight - 1, "+" .. string.rep("-", winWidth - 2) .. "+")
     for i = 1, winHeight - 2 do
-        gpu.set(winX, winY + i, "║")
-        gpu.set(winX + winWidth - 1, winY + i, "║")
+        gpu.set(winX, winY + i, "|")
+        gpu.set(winX + winWidth - 1, winY + i, "|")
     end
     
     local titleX = winX + math.floor((winWidth - #title) / 2)
     gpu.set(titleX, winY + 1, title)
     
-    gpu.set(winX, winY + 2, "╠" .. string.rep("═", winWidth - 2) .. "╣")
+    gpu.set(winX, winY + 2, "+" .. string.rep("-", winWidth - 2) .. "+")
     
     gpu.setForeground(theme.text)
     local promptX = winX + math.floor((winWidth - #prompt) / 2)
@@ -958,11 +954,11 @@ local sidebarWidth = 24
 local scrollOffset = 0
 
 local sidebarButtons = {
-    {id = "files", icon = "📁", text = "Файлы"},
-    {id = "apps", icon = "🚀", text = "Приложения"},
-    {id = "console", icon = "💻", text = "Консоль"},
-    {id = "info", icon = "ℹ️", text = "О системе"},
-    {id = "tools", icon = "🛠️", text = "Инструменты"}
+    {id = "files", icon = "F", text = "Файлы"},
+    {id = "apps", icon = "A", text = "Приложения"},
+    {id = "console", icon = "C", text = "Консоль"},
+    {id = "info", icon = "I", text = "О системе"},
+    {id = "tools", icon = "T", text = "Инструменты"}
 }
 
 -- Обновление списка файлов
@@ -1094,7 +1090,7 @@ local function drawInterface()
         gpu.set(startX + 45, 5, "РАЗМЕР")
         
         gpu.setForeground(theme.text)
-        gpu.set(startX, 6, string.rep("─", maxWidth - startX - 2))
+        gpu.set(startX, 6, string.rep("-", maxWidth - startX - 2))
         
         local y = 7
         for i = 1, math.min(#files - scrollOffset, availableHeight) do
@@ -1120,7 +1116,7 @@ local function drawInterface()
                 gpu.set(startX + 35, y, file.isDir and "Папка" or "Файл")
                 gpu.set(startX + 45, y, file.size)
                 
-                local icon = file.isDir and "📁" or "📄"
+                local icon = file.isDir and "[D]" or "[F]"
                 gpu.set(startX - 2, y, icon)
                 
                 y = y + 1
@@ -1165,7 +1161,7 @@ local function drawInterface()
         else
             gpu.setForeground(theme.accent)
             gpu.set(startX, 5, "ДОСТУПНЫЕ ПРИЛОЖЕНИЯ (Нажмите цифру или кликните):")
-            gpu.set(startX, 6, string.rep("─", maxWidth - startX - 3))
+            gpu.set(startX, 6, string.rep("-", maxWidth - startX - 3))
             
             y = 8
             for i, app in ipairs(availableApps) do
@@ -1190,7 +1186,7 @@ local function drawInterface()
         local startX = sidebarWidth + 3
         gpu.setForeground(theme.accent)
         gpu.set(startX, 5, "ИНФОРМАЦИЯ О СИСТЕМЕ")
-        gpu.set(startX, 6, string.rep("─", maxWidth - startX - 3))
+        gpu.set(startX, 6, string.rep("-", maxWidth - startX - 3))
         
         local info = {
             "Версия: Asmelit OS 4.3",
@@ -1210,7 +1206,7 @@ local function drawInterface()
         local startX = sidebarWidth + 3
         gpu.setForeground(theme.accent)
         gpu.set(startX, 5, "ИНСТРУМЕНТЫ СИСТЕМЫ")
-        gpu.set(startX, 6, string.rep("─", maxWidth - startX - 3))
+        gpu.set(startX, 6, string.rep("-", maxWidth - startX - 3))
         
         local tools = {
             {name = "Перезагрузить", key = "F12", desc = "Перезапуск системы"},
@@ -1238,7 +1234,7 @@ local function drawInterface()
     
     local hint = ""
     if mode == "files" then
-        hint = "↑↓ - Навигация | Enter - Открыть | ESC - Выход"
+        hint = "Вверх/Вниз - Навигация | Enter - Открыть | ESC - Выход"
     elseif mode == "apps" then
         hint = "1-6 - Запуск приложений | Клик по [Запустить] | ESC - Назад"
     else
@@ -1321,7 +1317,7 @@ rm [file] - удалить файл]], theme.text, "Справка")
                                 showMessage(content, theme.text, "Файл: " .. fileName)
                             end
                         else
-                            showMessage("Файл не найдён: " .. fileName, theme.error, "Ошибка")
+                            showMessage("Файл не найден: " .. fileName, theme.error, "Ошибка")
                         end
                         
                     elseif cmd:sub(1,4) == "run " then
@@ -1539,7 +1535,7 @@ F1 - Помощь
   F4 - Удалить
   F5 - Запустить
   F6 - Новая папка
-  ↑↓ - Навигация
+  Вверх/Вниз - Навигация
   Enter - Открыть
 В режиме Приложения:
   1-6 - Запуск приложений
