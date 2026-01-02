@@ -1,5 +1,5 @@
 -- =====================================================
--- Asmelit OS v4.2 - Полностью исправленная версия
+-- Asmelit OS v4.3 - Полностью исправленная версия
 -- =====================================================
 
 -- Основные библиотеки
@@ -544,7 +544,7 @@ function downloadAllApps()
     
     gpu.set(centerX - 12, 3, "╔══════════════════════════╗")
     gpu.set(centerX - 12, 4, "║   ЗАГРУЗКА ПРИЛОЖЕНИЙ   ║")
-    gpu.set(centerX - 12, 5, "║      Asmelit OS v4.2     ║")
+    gpu.set(centerX - 12, 5, "║      Asmelit OS v4.3     ║")
     gpu.set(centerX - 12, 6, "╚══════════════════════════╝")
     
     gpu.setForeground(theme.text)
@@ -665,7 +665,7 @@ function bootScreen()
 ║       ██║  ██║███████║██║ ╚═╝ ██║   ║
 ║       ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝   ║
 ║                                      ║
-║           ASMELIT OS v4.2            ║
+║           ASMELIT OS v4.3            ║
 ╚══════════════════════════════════════╝
 ]]
     
@@ -1040,7 +1040,7 @@ local function drawInterface()
     gpu.fill(1, 1, maxWidth, 2, " ")
     
     gpu.setForeground(theme.accent)
-    local title = "Asmelit OS v4.2"
+    local title = "Asmelit OS v4.3"
     if mode == "files" then
         title = title .. " - " .. currentDir
     else
@@ -1193,7 +1193,7 @@ local function drawInterface()
         gpu.set(startX, 6, string.rep("─", maxWidth - startX - 3))
         
         local info = {
-            "Версия: Asmelit OS 4.2",
+            "Версия: Asmelit OS 4.3",
             "Память: " .. computer.freeMemory() .. "/" .. computer.totalMemory() .. " байт",
             "Время работы: " .. string.format("%.1f мин", (computer.uptime() - startTime) / 60),
             "Приложений загружено: " .. #appsToDownload,
@@ -1605,7 +1605,7 @@ end
 -- =====================================================
 -- ТОЧКА ВХОДА СИСТЕМЫ
 -- =====================================================
-log("=== Asmelit OS v4.2 - Инициализация системы ===")
+log("=== Asmelit OS v4.3 - Инициализация системы ===")
 
 if computer.freeMemory() < 2048 then
     showMessage("Внимание: мало оперативной памяти!\n" ..
