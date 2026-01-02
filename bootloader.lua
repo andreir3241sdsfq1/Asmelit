@@ -1,194 +1,112 @@
--- =====================================================
--- Asmelit Bootloader v2.0
--- BIOS для загрузки системы с диска
--- =====================================================
+-- Asmelit Bootloader v3.0 (загружается с диска)
 
 local component = require("component")
 local computer = require("computer")
 local gpu = component.gpu
-local term = require("term")
+local event = require("event")
 
--- Настройки
-local BOOT_DEVICE = "/"
-local OS_PATH = "/home/startup.lua"
-local INSTALLER_PATH = "/home/installer.lua"
-local LOGO_PATH = "/home/logo.lua"
-
--- Отображение лого
-function showBootLogo()
+-- Загрузка и отображение лого
+local function showLogo()
+    -- Пробуем загрузить logo.lua
+    local fs = require("filesystem")
+    local logoCode = ""
+    
+    if fs.exists("/logo.lua") then
+        local file = io.open("/logo.lua", "r")
+        logoCode = file:read("*a")
+        file:close()
+    elseif fs.exists("/home/logo.lua") then
+        local file = io.open("/home/logo.lua", "r")
+        logoCode = file:read("*a")
+        file:close()
+    end
+    
+    -- Очищаем экран
     gpu.setBackground(0x000000)
-    gpu.setForeground(0x00FF00)
+    gpu.setForeground(0x00AA00)
     term.clear()
     
-    local logo = [[
-╔══════════════════════════════╗
-║  █████╗ ███████╗███╗   ███╗  ║
-║ ██╔══██╗██╔════╝████╗ ████║  ║
-║ ███████║███████╗██╔████╔██║  ║
-║ ██╔══██║╚════██║██║╚██╔╝██║  ║
-║ ██║  ██║███████║██║ ╚═╝ ██║  ║
-║ ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝  ║
-║      Asmelit Bootloader      ║
-║           v2.0               ║
-╚══════════════════════════════╝
-    ]]
-    
-    local lines = {}
-    for line in logo:gmatch("[^\r\n]+") do
-        table.insert(lines, line)
-    end
-    
-    local maxWidth, maxHeight = gpu.getResolution()
-    local centerX = math.floor(maxWidth / 2)
-    local centerY = math.floor(maxHeight / 2)
-    
-    for i, line in ipairs(lines) do
-        local x = centerX - math.floor(#line / 2)
-        local y = centerY - math.floor(#lines / 2) + i
-        gpu.set(x, y, line)
-    end
-    
-    return lines
-end
-
--- Проверка файловой системы
-function checkFilesystem()
-    local fs = require("filesystem")
-    
-    -- Создаем базовые директории если их нет
-    local dirs = {"/home", "/bin", "/tmp", "/lib"}
-    for _, dir in ipairs(dirs) do
-        if not fs.exists(dir) then
-            fs.makeDirectory(dir)
+    -- Отображаем лого (если есть) или стандартное
+    if #logoCode > 10 then
+        local lines = {}
+        for line in logoCode:gmatch("[^\r\n]+") do
+            table.insert(lines, line)
         end
+        
+        local w, h = gpu.getResolution()
+        local centerY = math.floor(h / 2) - math.floor(#lines / 2)
+        
+        for i, line in ipairs(lines) do
+            local centerX = math.floor(w / 2) - math.floor(#line / 2)
+            gpu.set(centerX, centerY + i, line)
+        end
+    else
+        gpu.set(35, 10, "ASMELIT OS")
+        gpu.set(33, 12, "Loading system...")
     end
     
-    -- Проверяем наличие ОС
-    local hasOS = fs.exists(OS_PATH)
-    local hasInstaller = fs.exists(INSTALLER_PATH)
-    
-    return hasOS, hasInstaller
+    -- Инфо внизу
+    gpu.setForeground(0xAAAAAA)
+    gpu.set(1, 24, "Memory: " .. math.floor(computer.freeMemory()/1024) .. "KB")
 end
 
--- Загрузка системы
-function bootSystem()
-    local fs = require("filesystem")
+-- Меню загрузки
+local function bootMenu()
+    showLogo()
     
-    -- Показываем лого
-    local logoLines = showBootLogo()
-    local maxWidth, maxHeight = gpu.getResolution()
-    local centerX = math.floor(maxWidth / 2)
-    
-    -- Информация о загрузке
-    gpu.setForeground(0xFFFFFF)
-    gpu.set(centerX - 10, maxHeight - 8, "Проверка системы...")
-    
-    -- Проверяем файловую систему
-    local hasOS, hasInstaller = checkFilesystem()
-    
-    gpu.set(centerX - 10, maxHeight - 6, "Память: " .. computer.freeMemory() .. " байт")
-    
-    if computer.maxEnergy() > 0 then
-        local energyPercent = math.floor((computer.energy() / computer.maxEnergy()) * 100)
-        gpu.set(centerX - 10, maxHeight - 5, "Энергия: " .. energyPercent .. "%")
-    end
-    
-    -- Выбор действия
-    gpu.set(centerX - 15, maxHeight - 3, "Нажмите: 1-ОС, 2-Установщик, 3-Оболочка")
-    
-    -- Ожидаем выбора
+    -- Ждём выбора 5 секунд
     local choice = nil
-    for i = 1, 300 do -- 30 секунд
-        local event = {require("event").pull(0.1, "key_down")}
-        if event[1] == "key_down" then
-            local char = event[3]
-            if char == "1" or char == "2" or char == "3" then
-                choice = char
-                break
-            end
-        end
-    end
+    local timer = os.startTimer(5)
     
-    -- Автовыбор если не выбрано
-    if not choice then
-        if hasOS then
-            choice = "1"
-        elseif hasInstaller then
-            choice = "2"
-        else
-            choice = "3"
+    gpu.setForeground(0xFFFFFF)
+    gpu.set(30, 18, "Press: 1-OS  2-Installer  3-Shell")
+    
+    while true do
+        local e = {event.pull()}
+        
+        if e[1] == "key_down" then
+            if e[3] == "1" then choice = "os" break
+            elseif e[3] == "2" then choice = "installer" break
+            elseif e[3] == "3" then choice = "shell" break
+            end
+        elseif e[1] == "timer" and e[2] == timer then
+            choice = "os" -- авто-выбор ОС
+            break
         end
     end
     
     -- Выполняем выбор
-    if choice == "1" and hasOS then
-        -- Загрузка ОС
-        gpu.set(centerX - 10, maxHeight - 1, "Загрузка Asmelit OS...")
-        os.sleep(1)
+    if choice == "os" then
+        -- Запускаем run.lua
+        local fs = require("filesystem")
+        local runPath = "/run.lua"
+        if not fs.exists(runPath) then runPath = "/home/run.lua" end
         
-        local file = io.open(OS_PATH, "r")
-        if file then
-            local osCode = file:read("*a")
-            file:close()
-            
-            local func, err = load(osCode, "=AsmelitOS")
-            if func then
-                local ok, result = pcall(func)
-                if not ok then
-                    gpu.setBackground(0xFF0000)
-                    gpu.setForeground(0xFFFFFF)
-                    term.clear()
-                    gpu.set(1, 1, "Ошибка ОС: " .. tostring(result))
-                    gpu.set(1, 3, "Нажмите любую клавишу для оболочки...")
-                    require("event").pull("key_down")
-                    require("shell").execute()
-                end
-            else
-                error("Ошибка загрузки ОС: " .. tostring(err))
-            end
+        if fs.exists(runPath) then
+            dofile(runPath)
         else
-            error("Не могу открыть " .. OS_PATH)
+            -- Прямой запуск ОС
+            local osPath = "/os.lua"
+            if not fs.exists(osPath) then osPath = "/home/os.lua" end
+            if fs.exists(osPath) then dofile(osPath) end
         end
-        
-    elseif choice == "2" and hasInstaller then
-        -- Запуск установщика
-        gpu.set(centerX - 10, maxHeight - 1, "Запуск установщика...")
-        os.sleep(1)
-        
-        local file = io.open(INSTALLER_PATH, "r")
-        if file then
-            local installerCode = file:read("*a")
-            file:close()
-            
-            local func, err = load(installerCode, "=Installer")
-            if func then
-                func()
-            else
-                error("Ошибка установщика: " .. tostring(err))
-            end
+    elseif choice == "installer" then
+        local fs = require("filesystem")
+        if fs.exists("/installer.lua") then
+            dofile("/installer.lua")
+        elseif fs.exists("/home/installer.lua") then
+            dofile("/home/installer.lua")
+        else
+            print("Installer not found!")
         end
-        
-    else
-        -- Стандартная оболочка OpenComputers
-        gpu.set(centerX - 10, maxHeight - 1, "Загрузка оболочки...")
-        os.sleep(1)
+    elseif choice == "shell" then
         require("shell").execute()
     end
 end
 
--- Главная функция
-function main()
-    local ok, err = pcall(bootSystem)
-    if not ok then
-        gpu.setBackground(0xFF0000)
-        gpu.setForeground(0xFFFFFF)
-        term.clear()
-        gpu.set(1, 1, "Ошибка загрузчика: " .. tostring(err))
-        gpu.set(1, 3, "Переход к оболочке через 5 сек...")
-        os.sleep(5)
-        require("shell").execute()
-    end
+-- Запуск с обработкой ошибок
+local ok, err = pcall(bootMenu)
+if not ok then
+    print("Bootloader error: " .. tostring(err))
+    require("shell").execute()
 end
-
--- Запуск
-main()
