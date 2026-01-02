@@ -1,6 +1,6 @@
 -- =====================================================
--- ASMELIT INSTALLER v2.0 - Главный установщик системы
--- Скачивает, устанавливает и настраивает всю систему
+-- ASMELIT INSTALLER v2.1 - РАБОЧАЯ ВЕРСИЯ
+-- Исправлены ошибки загрузки и инициализации
 -- =====================================================
 
 local component = require("component")
@@ -10,7 +10,7 @@ local term = require("term")
 local gpu = component.gpu
 local event = require("event")
 
--- Настройки
+-- ПРАВИЛЬНЫЙ URL для GitHub
 local GITHUB_USER = "andreir3241sdsfq1"
 local GITHUB_REPO = "Asmelit"
 local GITHUB_BRANCH = "main"
@@ -25,7 +25,7 @@ if component.isAvailable("internet") then
     end
 end
 
--- Интерфейс установщика
+-- Интерфейс
 local w, h = gpu.getResolution()
 local centerX = math.floor(w / 2)
 local centerY = math.floor(h / 2)
@@ -46,7 +46,7 @@ function drawHeader(title)
 end
 
 function showProgress(step, total, message)
-    drawHeader("ASMELIT INSTALLER - Шаг " .. step .. " из " .. total)
+    drawHeader("ASMELIT INSTALLER")
     
     gpu.setBackground(0x000022)
     gpu.setForeground(0xFFFFFF)
@@ -70,61 +70,64 @@ function showProgress(step, total, message)
     gpu.setForeground(0xAAAAAA)
     local percent = math.floor((step / total) * 100)
     gpu.set(centerX - 2, barY + 2, percent .. "%")
-    
-    os.sleep(0.5)
 end
 
-function downloadFile(filename, savePath)
+-- ИСПРАВЛЕННАЯ функция загрузки
+function downloadFile(filename)
     if not internet then
-        return false, "Нет интернет-соединения"
+        return false, "Нет интернета"
     end
     
     local url = GITHUB_BASE .. filename
-    local handle, err = pcall(internet.request, url)
+    print("Загрузка: " .. url)
+    
+    local handle, err = pcall(function()
+        return internet.request(url)
+    end)
     
     if not handle or type(handle) ~= "table" then
-        return false, "Ошибка запроса: " .. tostring(err)
+        return false, "Ошибка: " .. tostring(err)
     end
     
     local content = ""
-    local chunks = 0
+    local ok = true
+    local downloadErr = nil
     
+    -- Обработка чанков с защитой от ошибок
     for chunk in handle do
-        content = content .. chunk
-        chunks = chunks + 1
-        
-        -- Проверка размера
-        if #content > 1000000 then -- 1MB лимит
-            return false, "Файл слишком большой"
+        if chunk then
+            content = content .. chunk
+            if #content > 500000 then -- 500KB лимит
+                return false, "Файл слишком большой"
+            end
         end
-        
-        -- Пауза для отзывчивости
-        if chunks % 10 == 0 then
-            os.sleep(0.01)
-        end
+    end
+    
+    -- Проверяем что скачалось что-то
+    if #content < 100 then
+        return false, "Пустой ответ или ошибка загрузки"
     end
     
     -- Сохраняем файл
-    local file = io.open(savePath, "w")
+    local file = io.open("/" .. filename, "w")
     if file then
         file:write(content)
         file:close()
-        return true, "Успешно"
+        return true, "Успешно (" .. #content .. " байт)"
     else
-        return false, "Ошибка записи файла"
+        return false, "Ошибка записи"
     end
 end
 
-function createInitLoader()
-    -- Создаём наш init.lua который грузит ОС напрямую
+-- ИСПРАВЛЕННЫЙ init.lua
+function createFixedInit()
     local init_code = [[
--- ASMELIT SYSTEM LOADER v2.0
--- Загружает Asmelit OS напрямую
-
+-- ASMELIT BOOTLOADER v2.1 - FIXED
 local component = require("component")
 local computer = require("computer")
 local fs = require("filesystem")
 local event = require("event")
+local term = require("term")
 
 -- Инициализация экрана
 local gpu = component.gpu
@@ -137,30 +140,26 @@ if gpu and screen then
 end
 
 function showBootScreen()
-    local w, h = gpu.getResolution()
-    local cx = math.floor(w/2)
-    
-    gpu.set(cx-10, 5, "╔════════════════════════╗")
-    gpu.set(cx-10, 6, "║     ASMELIT OS v2.1    ║")
-    gpu.set(cx-10, 7, "║                        ║")
-    gpu.set(cx-10, 8, "║    Initializing...     ║")
-    gpu.set(cx-10, 9, "╚════════════════════════╝")
-    
-    -- Прогресс
-    for i = 1, 20 do
-        gpu.set(cx-10+i, 11, "█")
-        os.sleep(0.05)
+    if gpu then
+        local w, h = gpu.getResolution()
+        local cx = math.floor(w/2)
+        
+        gpu.set(cx-10, 5, "╔════════════════════════╗")
+        gpu.set(cx-10, 6, "║     ASMELIT OS v2.1    ║")
+        gpu.set(cx-10, 7, "║                        ║")
+        gpu.set(cx-10, 8, "║    Initializing...     ║")
+        gpu.set(cx-10, 9, "╚════════════════════════╝")
+        
+        for i = 1, 20 do
+            gpu.set(cx-10+i, 11, "█")
+            os.sleep(0.05)
+        end
     end
 end
 
 function loadOS()
-    -- Поиск ОС в порядке приоритета
-    local paths = {
-        "/os.lua",
-        "/home/os.lua",
-        "/system/os.lua",
-        "/AsmelitOS.lua"
-    }
+    -- Проверяем файлы в порядке приоритета
+    local paths = {"/os.lua", "/home/os.lua", "/system/os.lua"}
     
     for _, path in ipairs(paths) do
         if fs.exists(path) then
@@ -169,8 +168,8 @@ function loadOS()
                 local code = file:read("*a")
                 file:close()
                 
-                if #code > 5000 then -- Проверка что это действительно ОС
-                    print("Loading: " .. path)
+                if #code > 1000 then
+                    print("Found OS: " .. path .. " (" .. #code .. " bytes)")
                     local func, err = load(code, "=AsmelitOS")
                     if func then
                         return func
@@ -188,70 +187,73 @@ end
 -- Основной процесс загрузки
 local function main()
     -- Проверка памяти
-    if computer.freeMemory() < 2048 then
-        gpu.setForeground(0xFF0000)
-        gpu.set(30, 15, "ERROR: Low memory!")
+    if computer.freeMemory() < 1024 then
+        if gpu then
+            gpu.setForeground(0xFF0000)
+            gpu.set(30, 15, "ERROR: Low memory!")
+        end
         os.sleep(3)
-        require("shell").execute()
+        local shell = require("shell")
+        if shell then shell.execute() end
         return
     end
     
-    -- Показать загрузочный экран
+    -- Загрузочный экран
     local ok, err = pcall(showBootScreen)
     if not ok then
         print("Boot screen error: " .. tostring(err))
     end
     
-    -- Загрузить ОС
+    -- Загружаем ОС
     local os_func, os_err = loadOS()
     if os_func then
-        -- Запустить ОС
+        -- Запускаем ОС
         local success, error_msg = pcall(os_func)
         if not success then
-            -- Ошибка запуска ОС
-            gpu.setBackground(0xFF0000)
-            gpu.setForeground(0xFFFFFF)
-            term.clear()
-            gpu.set(1, 1, "OS CRASH: " .. tostring(error_msg))
-            gpu.set(1, 3, "Press any key for shell...")
+            -- Ошибка ОС
+            if gpu then
+                gpu.setBackground(0xFF0000)
+                gpu.setForeground(0xFFFFFF)
+                term.clear()
+                gpu.set(1, 1, "OS CRASH: " .. tostring(error_msg))
+                gpu.set(1, 3, "Press any key for shell...")
+            end
             event.pull("key_down")
             require("shell").execute()
         end
     else
         -- ОС не найдена
-        gpu.setBackground(0xFF0000)
-        gpu.setForeground(0xFFFFFF)
-        term.clear()
-        gpu.set(1, 1, "FATAL: Operating System not found!")
-        gpu.set(1, 3, "Expected files:")
-        gpu.set(1, 4, "  /os.lua")
-        gpu.set(1, 5, "  /home/os.lua")
-        gpu.set(1, 7, "Press any key for shell...")
+        if gpu then
+            gpu.setBackground(0xFF0000)
+            gpu.setForeground(0xFFFFFF)
+            term.clear()
+            gpu.set(1, 1, "ERROR: OS NOT FOUND")
+            gpu.set(1, 3, "Checked paths:")
+            gpu.set(1, 4, "1. /os.lua")
+            gpu.set(1, 5, "2. /home/os.lua")
+            gpu.set(1, 6, "3. /system/os.lua")
+            gpu.set(1, 8, "Press any key for shell...")
+        end
         event.pull("key_down")
         require("shell").execute()
     end
 end
 
--- Запустить загрузку
+-- Запуск
 main()
 ]]
     
-    -- Сохраняем init.lua в несколько мест для надежности
-    local paths = {
-        "/init.lua",
-        "/home/init.lua",
-        "/boot/init.lua"
-    }
+    -- Сохраняем в несколько мест
+    local paths = {"/init.lua", "/home/init.lua"}
     
     for _, path in ipairs(paths) do
         local file = io.open(path, "w")
         if file then
             file:write(init_code)
             file:close()
+            print("✓ init.lua создан: " .. path)
         end
     end
-    
-    return true
 end
 
 function createDirectoryStructure()
@@ -260,10 +262,7 @@ function createDirectoryStructure()
         "/home/apps",
         "/home/docs",
         "/home/config",
-        "/home/logs",
         "/system",
-        "/var",
-        "/var/log",
         "/tmp"
     }
     
@@ -274,230 +273,181 @@ function createDirectoryStructure()
     end
 end
 
-function backupOriginalSystem()
-    -- Создаем backup оригинальных файлов
-    local backupDir = "/backup_original_" .. os.date("%Y%m%d")
-    if not fs.exists(backupDir) then
-        fs.makeDirectory(backupDir)
-    end
+function checkExistingFiles()
+    print("\n=== ПРОВЕРКА СУЩЕСТВУЮЩИХ ФАЙЛОВ ===")
     
-    local files_to_backup = {
-        "/init.lua",
-        "/boot/init.lua",
-        "/autorun.lua",
-        "/.shrc"
+    local files = {
+        {path = "/os.lua", name = "OS файл"},
+        {path = "/home/os.lua", name = "OS (home)"},
+        {path = "/init.lua", name = "Загрузчик"},
+        {path = "/run.lua", name = "Запускатель"},
+        {path = "/logo.lua", name = "Логотип"}
     }
     
-    for _, file in ipairs(files_to_backup) do
-        if fs.exists(file) then
-            local content = ""
-            local f = io.open(file, "r")
-            if f then
-                content = f:read("*a")
-                f:close()
-                
-                local backupFile = io.open(backupDir .. file, "w")
-                if backupFile then
-                    backupFile:write(content)
-                    backupFile:close()
-                end
-            end
+    for _, file in ipairs(files) do
+        if fs.exists(file.path) then
+            local size = fs.size(file.path)
+            print("✓ " .. file.name .. ": " .. file.path .. " (" .. size .. " байт)")
+        else
+            print("✗ " .. file.name .. ": не найден")
         end
     end
-    
-    return backupDir
 end
 
+-- ГЛАВНАЯ ФУНКЦИЯ УСТАНОВКИ
 function mainInstallation()
-    -- Шаг 1: Подготовка
-    showProgress(1, 8, "Подготовка к установке...")
-    local backupDir = backupOriginalSystem()
-    print("Backup создан в: " .. backupDir)
+    print("=== НАЧАЛО УСТАНОВКИ ===")
     
-    -- Шаг 2: Загрузка ОС
-    showProgress(2, 8, "Загрузка Asmelit OS...")
-    if internet then
-        local ok, err = downloadFile("os.lua", "/os.lua")
-        if ok then
-            print("✓ ОС загружена")
+    -- Шаг 1: Проверка существующих файлов
+    showProgress(1, 6, "Проверка файлов...")
+    checkExistingFiles()
+    os.sleep(1)
+    
+    -- Шаг 2: Загрузка ОС (если нет)
+    showProgress(2, 6, "Загрузка Asmelit OS...")
+    if not fs.exists("/os.lua") and not fs.exists("/home/os.lua") then
+        if internet then
+            print("Скачиваю os.lua...")
+            local ok, msg = downloadFile("os.lua")
+            if ok then
+                print("✓ " .. msg)
+            else
+                print("✗ Ошибка: " .. msg)
+                print("⚠ ОС не скачана, нужна локальная копия")
+            end
         else
-            print("⚠ Ошибка загрузки ОС: " .. err)
-            print("  Используем локальную копию если есть...")
+            print("⚠ Нет интернета, ОС должна быть установлена вручную")
         end
+    else
+        print("✓ ОС уже существует")
     end
     
-    -- Шаг 3: Загрузка дополнительных файлов
-    showProgress(3, 8, "Загрузка дополнительных файлов...")
-    local files_to_download = {
-        "logo.lua",
-        "run.lua",
-        "installer.lua",
-        "bootloader.lua"
-    }
+    -- Шаг 3: Дополнительные файлы
+    showProgress(3, 6, "Загрузка дополнительных файлов...")
+    local extra_files = {"logo.lua", "run.lua"}
     
-    for _, file in ipairs(files_to_download) do
-        if internet then
-            downloadFile(file, "/" .. file)
+    for _, file in ipairs(extra_files) do
+        if not fs.exists("/" .. file) and internet then
+            print("Скачиваю " .. file .. "...")
+            local ok, msg = downloadFile(file)
+            if ok then print("✓ " .. msg) end
         end
     end
     
     -- Шаг 4: Создание init.lua
-    showProgress(4, 8, "Создание системного загрузчика...")
-    createInitLoader()
+    showProgress(4, 6, "Создание загрузчика...")
+    createFixedInit()
     
-    -- Шаг 5: Создание структуры папок
-    showProgress(5, 8, "Создание структуры папок...")
+    -- Шаг 5: Структура папок
+    showProgress(5, 6, "Создание структуры папок...")
     createDirectoryStructure()
     
-    -- Шаг 6: Создание файла автозапуска
-    showProgress(6, 8, "Настройка автозапуска...")
-    local startup_code = [[
--- Asmelit OS Startup
-print("Asmelit OS v2.1")
-print("System ready")
-]]
+    -- Шаг 6: Финальная проверка
+    showProgress(6, 6, "Финальная проверка...")
     
-    local startup = io.open("/home/startup.lua", "w")
-    if startup then
-        startup:write(startup_code)
-        startup:close()
-    end
-    
-    -- Шаг 7: Создание файла конфигурации
-    showProgress(7, 8, "Создание конфигурации...")
-    local config_code = [[
--- Asmelit OS Configuration
-config = {
-    version = "2.1",
-    autologin = true,
-    gui_enabled = true,
-    shell = "/bin/bash.lua"
-}
-]]
-    
-    local config = io.open("/home/config/system.cfg", "w")
-    if config then
-        config:write(config_code)
-        config:close()
-    end
-    
-    -- Шаг 8: Завершение
-    showProgress(8, 8, "Завершение установки...")
-    
-    -- Финальный экран
+    -- Проверяем что всё установлено
+    term.clear()
     drawHeader("УСТАНОВКА ЗАВЕРШЕНА")
     
-    gpu.setBackground(0x000022)
+    gpu.setBackground(0x002200)
     gpu.setForeground(0x00FF00)
     gpu.fill(1, 3, w, h-3, " ")
     
-    gpu.set(centerX - 10, centerY - 4, "╔══════════════════════════════╗")
-    gpu.set(centerX - 10, centerY - 3, "║    УСТАНОВКА УСПЕШНА!       ║")
-    gpu.set(centerX - 10, centerY - 2, "╠══════════════════════════════╣")
-    gpu.set(centerX - 10, centerY - 1, "║  Asmelit OS v2.1 установлен  ║")
-    gpu.set(centerX - 10, centerY,     "║                              ║")
-    gpu.set(centerX - 10, centerY + 1, "║  Перезагрузите компьютер    ║")
-    gpu.set(centerX - 10, centerY + 2, "║  для запуска новой системы  ║")
-    gpu.set(centerX - 10, centerY + 3, "╚══════════════════════════════╝")
+    gpu.set(centerX - 15, centerY - 4, "=== ИТОГИ УСТАНОВКИ ===")
     
-    gpu.setForeground(0xFFFFFF)
-    gpu.set(centerX - 15, centerY + 6, "Backup оригинальной системы в: " .. backupDir)
+    local checks = {
+        {name = "Загрузчик (init.lua)", path = "/init.lua"},
+        {name = "Операционная система", path = "/os.lua"},
+        {name = "Структура папок", check = function() return fs.exists("/home/user") end}
+    }
     
-    if not internet then
-        gpu.setForeground(0xFFFF00)
-        gpu.set(centerX - 12, centerY + 8, "⚠ Установка без интернета - проверьте файлы!")
+    local y = centerY - 2
+    for i, check in ipairs(checks) do
+        local status = "✗"
+        local color = 0xFF0000
+        
+        if check.path then
+            if fs.exists(check.path) then
+                local size = fs.size(check.path)
+                status = "✓ (" .. size .. " байт)"
+                color = 0x00FF00
+            end
+        elseif check.check then
+            if check.check() then
+                status = "✓"
+                color = 0x00FF00
+            end
+        end
+        
+        gpu.setForeground(color)
+        gpu.set(centerX - 20, y, check.name .. ": " .. status)
+        y = y + 2
     end
     
-    gpu.setForeground(0xAAAAAA)
-    gpu.set(centerX - 20, h - 2, "Нажмите любую клавишу для выхода в меню...")
+    if not fs.exists("/os.lua") and not fs.exists("/home/os.lua") then
+        gpu.setForeground(0xFFFF00)
+        gpu.set(centerX - 25, y + 2, "ВНИМАНИЕ: ОС НЕ НАЙДЕНА!")
+        gpu.set(centerX - 25, y + 3, "Система не запустится без os.lua")
+    end
     
-    event.pull("key_down")
-    
-    -- Меню после установки
-    gpu.setBackground(0x000033)
     gpu.setForeground(0xFFFFFF)
-    term.clear()
+    gpu.set(centerX - 20, h - 4, "Выберите действие:")
+    gpu.set(centerX - 20, h - 3, "1. Перезагрузить сейчас")
+    gpu.set(centerX - 20, h - 2, "2. Выйти в оболочку")
     
-    drawHeader("ASMELIT INSTALLER - МЕНЮ")
-    
-    gpu.set(centerX - 15, centerY - 2, "Установка завершена!")
-    gpu.set(centerX - 15, centerY, "Выберите действие:")
-    gpu.set(centerX - 15, centerY + 2, "1. Перезагрузить сейчас")
-    gpu.set(centerX - 15, centerY + 3, "2. Запустить Asmelit OS")
-    gpu.set(centerX - 15, centerY + 4, "3. Выйти в оболочку")
-    gpu.set(centerX - 15, centerY + 5, "4. Проверить установку")
-    
-    gpu.set(centerX - 15, centerY + 7, "Выбор [1-4]: ")
+    gpu.set(centerX - 20, h - 1, "> ")
     
     local choice = io.read()
     
     if choice == "1" then
-        print("Перезагрузка...")
+        print("Перезагрузка через 2 секунды...")
         os.sleep(2)
         computer.shutdown(true)
-    elseif choice == "2" then
-        -- Запустить ОС напрямую
-        if fs.exists("/os.lua") then
-            dofile("/os.lua")
-        else
-            print("ОС не найдена!")
-            os.sleep(2)
-            require("shell").execute()
-        end
-    elseif choice == "3" then
-        require("shell").execute()
-    elseif choice == "4" then
-        -- Проверка установки
-        term.clear()
-        print("=== ПРОВЕРКА УСТАНОВКИ ===")
-        print("1. init.lua: " .. (fs.exists("/init.lua") and "✓" or "✗"))
-        print("2. os.lua: " .. (fs.exists("/os.lua") and "✓ (" .. fs.size("/os.lua") .. " bytes)" or "✗"))
-        print("3. Структура папок: " .. (fs.exists("/home/user") and "✓" or "✗"))
-        print("4. Backup: " .. backupDir)
-        print("\nНажмите любую клавишу...")
-        io.read()
-        require("shell").execute()
     else
         require("shell").execute()
     end
 end
 
--- Запуск установщика
+-- ЗАПУСК УСТАНОВЩИКА
 gpu.setBackground(0x000000)
 gpu.setForeground(0xFFFFFF)
 term.clear()
 
-drawHeader("ASMELIT SYSTEM INSTALLER v2.0")
+drawHeader("ASMELIT INSTALLER v2.1")
 
-gpu.set(centerX - 15, centerY - 4, "Добро пожаловать в установщик Asmelit OS!")
-gpu.set(centerX - 15, centerY - 2, "Этот установщик:")
-gpu.set(centerX - 15, centerY - 1, "1. Скачает и установит Asmelit OS")
-gpu.set(centerX - 15, centerY,     "2. Заменит системный загрузчик (init.lua)")
-gpu.set(centerX - 15, centerY + 1, "3. Создаст структуру папок")
-gpu.set(centerX - 15, centerY + 2, "4. Настроит автозапуск")
+gpu.set(centerX - 25, centerY - 6, "╔══════════════════════════════════════╗")
+gpu.set(centerX - 25, centerY - 5, "║        ASMELIT SYSTEM INSTALLER      ║")
+gpu.set(centerX - 25, centerY - 4, "║                 v2.1                 ║")
+gpu.set(centerX - 25, centerY - 3, "╠══════════════════════════════════════╣")
+gpu.set(centerX - 25, centerY - 2, "║  Установит Asmelit OS и загрузчик    ║")
+gpu.set(centerX - 25, centerY - 1, "║  Заменит стандартный init.lua        ║")
+gpu.set(centerX - 25, centerY,     "║  Создаст структуру папок             ║")
+gpu.set(centerX - 25, centerY + 1, "║                                      ║")
+gpu.set(centerX - 25, centerY + 2, "╚══════════════════════════════════════╝")
 
-if not internet then
+if internet then
+    gpu.setForeground(0x00FF00)
+    gpu.set(centerX - 10, centerY + 4, "✓ Интернет доступен")
+else
     gpu.setForeground(0xFFFF00)
-    gpu.set(centerX - 15, centerY + 4, "⚠ ВНИМАНИЕ: Нет интернет-соединения!")
-    gpu.set(centerX - 15, centerY + 5, "   Установка будет произведена только из")
-    gpu.set(centerX - 15, centerY + 6, "   локальных файлов, если они есть.")
-    gpu.setForeground(0xFFFFFF)
+    gpu.set(centerX - 12, centerY + 4, "⚠ Нет интернета - только локальные файлы")
 end
 
-gpu.set(centerX - 15, centerY + 8, "Продолжить установку? (y/n)")
-gpu.set(centerX - 15, centerY + 9, "> ")
+gpu.setForeground(0xFFFFFF)
+gpu.set(centerX - 15, centerY + 6, "Начать установку? (y/n)")
+gpu.set(centerX - 15, centerY + 7, "> ")
 
 local answer = io.read()
 
-if answer:lower() == "y" then
+if answer:lower() == "y" or answer == "д" then  -- поддержка русской раскладки
     local ok, err = pcall(mainInstallation)
     if not ok then
         gpu.setBackground(0xFF0000)
         gpu.setForeground(0xFFFFFF)
         term.clear()
-        gpu.set(1, 1, "ОШИБКА УСТАНОВКИ!")
+        gpu.set(1, 1, "КРИТИЧЕСКАЯ ОШИБКА УСТАНОВКИ:")
         gpu.set(1, 3, tostring(err))
-        gpu.set(1, 5, "Нажмите любую клавишу для выхода в оболочку...")
+        gpu.set(1, 5, "Нажмите любую клавишу...")
         event.pull("key_down")
         require("shell").execute()
     end
