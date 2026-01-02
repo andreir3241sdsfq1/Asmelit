@@ -1,7 +1,7 @@
 local c = _G.component
 local comp = _G.computer
 local g = c and c.gpu
-local e = _G.event
+local ev = _G.event
 
 if g then
     g.setBackground(0x000000)
@@ -48,7 +48,7 @@ for i = 1, 30 do
         booted = true
         break
     end
-    e.pull(0.1)
+    if ev then ev.pull(0.1) end
 end
 
 if not booted then
@@ -56,6 +56,7 @@ if not booted then
         g.set(1, 10, "Press any key for shell...")
         g.setForeground(0xFFFFFF)
     end
-    e.pull("key_down")
-    require("shell").execute()
+    if ev then ev.pull("key_down") end
+    local sh = require("shell")
+    if sh then sh.execute() end
 end
