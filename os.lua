@@ -739,87 +739,6 @@ function bootScreen()
     log("Система загружена успешно")
 end
 
--- Создание нового файла
-function createNewFile()
-    local filename = inputDialog("Введите имя нового файла:", "Создание файла")
-    if filename and filename ~= "" then
-        if not filename:find("%.") then
-            filename = filename .. ".lua"
-        end
-        
-        local path = currentDir .. "/" .. filename
-        
-        if fs.exists(path) then
-            if not showYesNoMessage("Файл '" .. filename .. "' уже существует.\nПерезаписать?", "Файл существует") then
-                return
-            end
-        end
-        
-        local file = io.open(path, "w")
-        if file then
-            file:write("-- Новый Lua файл\nprint(\"Привет из Asmelit OS!\")\n")
-            file:close()
-            showMessage("Файл создан: " .. filename, theme.success, "Создание файла")
-            refreshFiles()
-        else
-            showMessage("Ошибка создания файла", theme.error, "Ошибка")
-        end
-    end
-end
-
--- Удаление файла или папки
-function deleteFile(filename, isDir)
-    local path = currentDir .. "/" .. filename
-    
-    local message = isDir and 
-        "Удалить папку '" .. filename .. "' со всем содержимым?" :
-        "Удалить файл '" .. filename .. "'?"
-    
-    if showYesNoMessage(message, "Подтверждение удаления") then
-        if isDir then
-            local function deleteRecursive(dirPath)
-                if fs.exists(dirPath) and fs.isDirectory(dirPath) then
-                    for item in fs.list(dirPath) do
-                        local itemPath = dirPath .. "/" .. item
-                        if fs.isDirectory(itemPath) then
-                            deleteRecursive(itemPath)
-                        else
-                            fs.remove(itemPath)
-                        end
-                    end
-                    fs.remove(dirPath)
-                end
-            end
-            deleteRecursive(path)
-        else
-            fs.remove(path)
-        end
-        
-        showMessage((isDir and "Папка" or "Файл") .. " удален: " .. filename, theme.success, "Удаление")
-        refreshFiles()
-    end
-end
-
--- Создание новой папки
-function createNewFolder()
-    local folderName = inputDialog("Введите имя новой папки:", "Создание папки")
-    if folderName and folderName ~= "" then
-        local path = currentDir .. "/" .. folderName
-        
-        if fs.exists(path) then
-            showMessage("Папка с таким именем уже существует", theme.warning, "Ошибка")
-            return
-        end
-        
-        if fs.makeDirectory(path) then
-            showMessage("Папка создана: " .. folderName, theme.success, "Создание папки")
-            refreshFiles()
-        else
-            showMessage("Ошибка создания папки", theme.error, "Ошибка")
-        end
-    end
-end
-
 -- Диалог ввода текста
 function inputDialog(prompt, title)
     title = title or "Ввод"
@@ -901,6 +820,87 @@ function inputDialog(prompt, title)
             if x >= btnX and x < btnX + #btnText and y == btnY then
                 return inputText
             end
+        end
+    end
+end
+
+-- Создание нового файла
+function createNewFile()
+    local filename = inputDialog("Введите имя нового файла:", "Создание файла")
+    if filename and filename ~= "" then
+        if not filename:find("%.") then
+            filename = filename .. ".lua"
+        end
+        
+        local path = currentDir .. "/" .. filename
+        
+        if fs.exists(path) then
+            if not showYesNoMessage("Файл '" .. filename .. "' уже существует.\nПерезаписать?", "Файл существует") then
+                return
+            end
+        end
+        
+        local file = io.open(path, "w")
+        if file then
+            file:write("-- Новый Lua файл\nprint(\"Привет из Asmelit OS!\")\n")
+            file:close()
+            showMessage("Файл создан: " .. filename, theme.success, "Создание файла")
+            refreshFiles()
+        else
+            showMessage("Ошибка создания файла", theme.error, "Ошибка")
+        end
+    end
+end
+
+-- Удаление файла или папки
+function deleteFile(filename, isDir)
+    local path = currentDir .. "/" .. filename
+    
+    local message = isDir and 
+        "Удалить папку '" .. filename .. "' со всем содержимым?" :
+        "Удалить файл '" .. filename .. "'?"
+    
+    if showYesNoMessage(message, "Подтверждение удаления") then
+        if isDir then
+            local function deleteRecursive(dirPath)
+                if fs.exists(dirPath) and fs.isDirectory(dirPath) then
+                    for item in fs.list(dirPath) do
+                        local itemPath = dirPath .. "/" .. item
+                        if fs.isDirectory(itemPath) then
+                            deleteRecursive(itemPath)
+                        else
+                            fs.remove(itemPath)
+                        end
+                    end
+                    fs.remove(dirPath)
+                end
+            end
+            deleteRecursive(path)
+        else
+            fs.remove(path)
+        end
+        
+        showMessage((isDir and "Папка" or "Файл") .. " удален: " .. filename, theme.success, "Удаление")
+        refreshFiles()
+    end
+end
+
+-- Создание новой папки
+function createNewFolder()
+    local folderName = inputDialog("Введите имя новой папки:", "Создание папки")
+    if folderName and folderName ~= "" then
+        local path = currentDir .. "/" .. folderName
+        
+        if fs.exists(path) then
+            showMessage("Папка с таким именем уже существует", theme.warning, "Ошибка")
+            return
+        end
+        
+        if fs.makeDirectory(path) then
+            showMessage("Папка создана: " .. folderName, theme.success, "Создание папки")
+            refreshFiles()
+        else
+            showMessage("Ошибка создания папки", theme.error, "Ошибка")
         end
     end
 end
