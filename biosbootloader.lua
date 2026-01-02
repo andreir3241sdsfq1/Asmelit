@@ -1,5 +1,5 @@
 local c = _G.component
-local comp = _G.computer
+local comp = _G.computer or {}
 local g = c and c.gpu
 local ev = _G.event
 
@@ -58,10 +58,13 @@ if not booted then
     end
     if ev then ev.pull("key_down") end
     
+    -- Fallback
     if g then
         g.set(1, 12, "Cannot load shell")
         g.set(1, 13, "Rebooting...")
     end
-    comp.beep(1000, 1)
-    comp.shutdown(true)
+    
+    -- Безопасный beep и shutdown
+    if comp.beep then comp.beep(1000, 1) end
+    if comp.shutdown then comp.shutdown(true) end
 end
