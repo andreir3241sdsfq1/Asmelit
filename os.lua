@@ -1,6 +1,5 @@
 -- =====================================================
--- Asmelit OS v4.0 - Полная версия
--- Загружает приложения с GitHub при запуске
+-- Asmelit OS v4.1 - Исправленная версия
 -- =====================================================
 
 -- Основные библиотеки
@@ -11,9 +10,6 @@ local term = require("term")
 local gpu = component.gpu
 local fs = require("filesystem")
 local serialization = require("serialization")
-local sides = require("sides")
-local colors = require("colors")
-local keyboard = require("keyboard")
 
 -- Глобальные переменные системы
 local systemLog = {}
@@ -36,9 +32,7 @@ local theme = {
     info = 0x00AAFF,
     button = 0x2A2A5A,
     button_hover = 0x3A3A7A,
-    button_active = 0x4A7BFF,
-    border = 0x303060,
-    shadow = 0x050510
+    button_active = 0x4A7BFF
 }
 
 -- Список приложений для загрузки с GitHub
@@ -87,17 +81,128 @@ local appsToDownload = {
     }
 }
 
--- Логирование в системе
+-- Логирование
 function log(message)
     local timestamp = os.date("%H:%M:%S")
     local entry = timestamp .. " - " .. message
     table.insert(systemLog, entry)
-    if #systemLog > 100 then
+    if #systemLog > 50 then
         table.remove(systemLog, 1)
     end
 end
 
--- Показать окно сообщения
+-- Показать окно с выбором Да/Нет
+function showYesNoMessage(text, title)
+    title = title or "Вопрос"
+    
+    -- Подготовка окна
+    local lines = {}
+    for line in text:gmatch("[^\r\n]+") do
+        table.insert(lines, line)
+    end
+    
+    local maxLineWidth = #title
+    for _, line in ipairs(lines) do
+        if #line > maxLineWidth then maxLineWidth = #line end
+    end
+    
+    local winWidth = math.max(40, maxLineWidth + 8)
+    local winHeight = #lines + 8
+    local winX = math.floor((maxWidth - winWidth) / 2)
+    local winY = math.floor((maxHeight - winHeight) / 2)
+    
+    -- Очищаем область под окно
+    gpu.setBackground(theme.background)
+    gpu.fill(winX, winY, winWidth, winHeight, " ")
+    
+    -- Основное окно
+    gpu.setBackground(theme.header)
+    gpu.fill(winX, winY, winWidth, winHeight, " ")
+    
+    -- Рамка
+    gpu.setForeground(theme.accent)
+    gpu.set(winX, winY, "╔" .. string.rep("═", winWidth - 2) .. "╗")
+    gpu.set(winX, winY + winHeight - 1, "╚" .. string.rep("═", winWidth - 2) .. "╝")
+    for i = 1, winHeight - 2 do
+        gpu.set(winX, winY + i, "║")
+        gpu.set(winX + winWidth - 1, winY + i, "║")
+    end
+    
+    -- Заголовок
+    local titleX = winX + math.floor((winWidth - #title) / 2)
+    gpu.set(titleX, winY + 1, title)
+    
+    -- Разделитель
+    gpu.set(winX, winY + 2, "╠" .. string.rep("═", winWidth - 2) .. "╣")
+    
+    -- Текст сообщения
+    gpu.setForeground(theme.text)
+    for i, line in ipairs(lines) do
+        local lineX = winX + math.floor((winWidth - #line) / 2)
+        gpu.set(lineX, winY + 4 + i, line)
+    end
+    
+    -- Кнопки
+    local btnYesText = "  Да  "
+    local btnNoText = "  Нет  "
+    local btnYesX = winX + math.floor(winWidth / 2) - #btnYesText - 2
+    local btnNoX = winX + math.floor(winWidth / 2) + 2
+    local btnY = winY + winHeight - 3
+    
+    -- Выбранная кнопка
+    local selected = 1 -- 1 = Да, 2 = Нет
+    
+    while true do
+        -- Кнопка Да
+        if selected == 1 then
+            gpu.setBackground(theme.button_active)
+            gpu.setForeground(0x000000)
+        else
+            gpu.setBackground(theme.button)
+            gpu.setForeground(theme.text)
+        end
+        gpu.fill(btnYesX, btnY, #btnYesText, 1, " ")
+        gpu.set(btnYesX, btnY, btnYesText)
+        
+        -- Кнопка Нет
+        if selected == 2 then
+            gpu.setBackground(theme.button_active)
+            gpu.setForeground(0x000000)
+        else
+            gpu.setBackground(theme.button)
+            gpu.setForeground(theme.text)
+        end
+        gpu.fill(btnNoX, btnY, #btnNoText, 1, " ")
+        gpu.set(btnNoX, btnY, btnNoText)
+        
+        -- Обработка ввода
+        local e = {event.pull()}
+        if e[1] == "key_down" then
+            local code = e[4]
+            
+            if code == 28 or code == 57 then -- Enter или Space
+                return selected == 1
+            elseif code == 1 then -- ESC
+                return false
+            elseif code == 203 then -- Left
+                selected = 1
+            elseif code == 205 then -- Right
+                selected = 2
+            end
+            
+        elseif e[1] == "touch" then
+            local x, y = e[3], e[4]
+            
+            if x >= btnYesX and x < btnYesX + #btnYesText and y == btnY then
+                return true
+            elseif x >= btnNoX and x < btnNoX + #btnNoText and y == btnY then
+                return false
+            end
+        end
+    end
+end
+
+-- Показать сообщение с кнопкой OK
 function showMessage(text, color, title)
     color = color or theme.text
     title = title or "Сообщение"
@@ -122,16 +227,12 @@ function showMessage(text, color, title)
     gpu.setBackground(theme.background)
     gpu.fill(winX, winY, winWidth, winHeight, " ")
     
-    -- Рисуем тень
-    gpu.setBackground(theme.shadow)
-    gpu.fill(winX + 2, winY + 2, winWidth, winHeight, " ")
-    
     -- Основное окно
     gpu.setBackground(theme.header)
     gpu.fill(winX, winY, winWidth, winHeight, " ")
     
     -- Рамка
-    gpu.setForeground(theme.border)
+    gpu.setForeground(theme.accent)
     gpu.set(winX, winY, "╔" .. string.rep("═", winWidth - 2) .. "╗")
     gpu.set(winX, winY + winHeight - 1, "╚" .. string.rep("═", winWidth - 2) .. "╝")
     for i = 1, winHeight - 2 do
@@ -140,11 +241,10 @@ function showMessage(text, color, title)
     end
     
     -- Заголовок
-    gpu.setForeground(theme.accent)
     local titleX = winX + math.floor((winWidth - #title) / 2)
     gpu.set(titleX, winY + 1, title)
     
-    -- Разделитель под заголовком
+    -- Разделитель
     gpu.set(winX, winY + 2, "╠" .. string.rep("═", winWidth - 2) .. "╣")
     
     -- Текст сообщения
@@ -155,7 +255,7 @@ function showMessage(text, color, title)
     end
     
     -- Кнопка OK
-    local btnText = " OK "
+    local btnText = "   OK   "
     local btnX = winX + math.floor((winWidth - #btnText) / 2)
     local btnY = winY + winHeight - 3
     
@@ -182,7 +282,7 @@ function showMessage(text, color, title)
     end
 end
 
--- Загрузка файла с GitHub
+-- Загрузка файла с GitHub (ИСПРАВЛЕННАЯ ВЕРСИЯ)
 function downloadFromGitHub(url, filename)
     -- Проверяем наличие интернет-карты
     if not component.isAvailable("internet") then
@@ -190,10 +290,21 @@ function downloadFromGitHub(url, filename)
     end
     
     local internet = require("internet")
-    local handle, err = pcall(internet.request, url)
+    local handle, err
+    
+    -- Безопасный запрос с pcall
+    local ok, result = pcall(function()
+        return internet.request(url)
+    end)
+    
+    if not ok then
+        return false, "Ошибка запроса: " .. tostring(result)
+    end
+    
+    handle = result
     
     if not handle then
-        return false, "Ошибка запроса: " .. tostring(err)
+        return false, "Не удалось получить ответ от сервера"
     end
     
     -- Читаем содержимое файла
@@ -201,23 +312,20 @@ function downloadFromGitHub(url, filename)
     local chunkCount = 0
     
     for chunk in handle do
-        content = content .. chunk
-        chunkCount = chunkCount + 1
-        
-        -- Защита от слишком больших файлов
-        if #content > 500000 then -- 500KB лимит
-            return false, "Файл слишком большой"
-        end
-        
-        -- Даем системе передышку
-        if chunkCount % 10 == 0 then
-            os.sleep(0.01)
+        if chunk then
+            content = content .. chunk
+            chunkCount = chunkCount + 1
+            
+            -- Защита от слишком больших файлов
+            if #content > 500000 then -- 500KB лимит
+                return false, "Файл слишком большой"
+            end
         end
     end
     
     -- Проверяем что файл не пустой
     if #content < 10 then
-        return false, "Пустой файл"
+        return false, "Пустой файл или ошибка загрузки"
     end
     
     -- Создаем папку для приложений если нет
@@ -245,7 +353,7 @@ function downloadAllApps()
     
     gpu.set(centerX - 12, 3, "╔══════════════════════════╗")
     gpu.set(centerX - 12, 4, "║   ЗАГРУЗКА ПРИЛОЖЕНИЙ   ║")
-    gpu.set(centerX - 12, 5, "║      Asmelit OS v4.0     ║")
+    gpu.set(centerX - 12, 5, "║      Asmelit OS v4.1     ║")
     gpu.set(centerX - 12, 6, "╚══════════════════════════╝")
     
     gpu.setForeground(theme.text)
@@ -344,8 +452,12 @@ function checkAndLoadApps()
                 missingText = missingText .. "• " .. appName .. "\n"
             end
             
-            showMessage(missingText .. "\nЗагрузить приложения с GitHub?", theme.warning, "Обнаружены отсутствующие приложения")
-            downloadAllApps()
+            if showYesNoMessage(missingText .. "\nЗагрузить приложения с GitHub?", "Обнаружены отсутствующие приложения") then
+                downloadAllApps()
+            else
+                showMessage("Приложения не будут загружены.\nНекоторые функции могут быть недоступны.", 
+                          theme.warning, "Информация")
+            end
         else
             showMessage("Нет интернет-карты.\nПриложения не будут доступны.\n\nОтсутствуют:\n" .. 
                        table.concat(missingApps, "\n"), theme.warning, "Предупреждение")
@@ -372,7 +484,7 @@ function bootScreen()
 ║       ██║  ██║███████║██║ ╚═╝ ██║   ║
 ║       ╚═╝  ╚═╝╚══════╝╚═╝     ╚═╝   ║
 ║                                      ║
-║           ASMELIT OS v4.0            ║
+║           ASMELIT OS v4.1            ║
 ╚══════════════════════════════════════╝
 ]]
     
@@ -462,16 +574,13 @@ function mainGUI()
     local mode = "files"
     local sidebarWidth = 24
     local scrollOffset = 0
-    local hoverButton = nil
     
     local sidebarButtons = {
-        {id = "files", icon = "📁", text = "Файлы", hint = "Файловый менеджер"},
-        {id = "apps", icon = "🚀", text = "Приложения", hint = "Запуск программ"},
-        {id = "console", icon = "💻", text = "Консоль", hint = "Командная строка"},
-        {id = "info", icon = "ℹ️", text = "О системе", hint = "Информация о системе"}
+        {id = "files", icon = "📁", text = "Файлы"},
+        {id = "apps", icon = "🚀", text = "Приложения"},
+        {id = "console", icon = "💻", text = "Консоль"},
+        {id = "info", icon = "ℹ️", text = "О системе"}
     }
-    
-    local buttonPositions = {}
     
     -- Обновление списка файлов
     local function refreshFiles()
@@ -485,14 +594,13 @@ function mainGUI()
                         name = item,
                         isDir = isDir,
                         size = isDir and "<DIR>" or tostring(fs.size(path) or "0"),
-                        path = path,
-                        modified = fs.lastModified(path) or 0
+                        path = path
                     })
                 end
             end
         end
         
-        -- Сортировка: сначала папки, потом файлы, по алфавиту
+        -- Сортировка
         table.sort(files, function(a, b)
             if a.isDir and not b.isDir then return true
             elseif not a.isDir and b.isDir then return false
@@ -511,386 +619,171 @@ function mainGUI()
         gpu.setForeground(theme.text)
         term.clear()
         
-        -- Верхняя панель с градиентом
-        for i = 1, 3 do
-            local color = theme.header - (i-1) * 0x050505
-            gpu.setBackground(color)
-            gpu.fill(1, i, maxWidth, 1, " ")
-        end
-        
-        -- Заголовок окна
+        -- Верхняя панель
         gpu.setBackground(theme.header)
-        gpu.setForeground(theme.accent)
+        gpu.fill(1, 1, maxWidth, 2, " ")
         
-        local title = "Asmelit OS v4.0"
+        gpu.setForeground(theme.accent)
+        local title = "Asmelit OS v4.1"
         if mode == "files" then
-            title = title .. " » " .. currentDir
+            title = title .. " - " .. currentDir
         else
             for _, btn in ipairs(sidebarButtons) do
                 if btn.id == mode then
-                    title = title .. " » " .. btn.text
+                    title = title .. " - " .. btn.text
                     break
                 end
             end
         end
+        gpu.set(3, 1, title)
         
-        gpu.set(3, 2, "◈ " .. title)
-        
-        -- Системная информация в правом углу
-        local time = os.date("%H:%M:%S")
+        -- Время и память
+        local time = os.date("%H:%M")
         local mem = math.floor(computer.freeMemory() / 1024) .. "K"
-        local energy = ""
-        if computer.maxEnergy() > 0 then
-            energy = " ⚡" .. math.floor((computer.energy() / computer.maxEnergy()) * 100) .. "%"
-        end
-        
-        local statusText = time .. " | " .. mem .. energy
-        gpu.set(maxWidth - #statusText - 2, 2, statusText)
+        gpu.set(maxWidth - #time - #mem - 3, 1, time .. " | " .. mem)
         
         -- Боковая панель
         gpu.setBackground(theme.sidebar)
-        gpu.fill(1, 4, sidebarWidth, maxHeight - 3, " ")
-        
-        -- Вертикальная граница сайдбара
-        gpu.setForeground(theme.border)
-        gpu.set(sidebarWidth, 4, "├")
-        gpu.set(sidebarWidth, maxHeight, "╘")
-        for i = 5, maxHeight - 1 do
-            gpu.set(sidebarWidth, i, "│")
-        end
+        gpu.fill(1, 3, sidebarWidth, maxHeight - 2, " ")
         
         -- Кнопки сайдбара
-        buttonPositions = {}
-        local buttonY = 6
-        
+        local buttonY = 5
         for _, btn in ipairs(sidebarButtons) do
             local isActive = (mode == btn.id)
-            local isHover = (hoverButton == btn.id)
             
-            -- Подсветка при наведении/активности
-            if isHover and not isActive then
-                gpu.setBackground(theme.button_hover)
-            elseif isActive then
-                gpu.setBackground(theme.button_active)
-            else
-                gpu.setBackground(theme.sidebar)
-            end
-            
-            -- Фон кнопки
-            gpu.fill(1, buttonY, sidebarWidth - 1, 1, " ")
-            
-            -- Текст кнопки
             if isActive then
+                gpu.setBackground(theme.button_active)
                 gpu.setForeground(0x000000)
             else
+                gpu.setBackground(theme.sidebar)
                 gpu.setForeground(theme.text)
             end
             
+            gpu.fill(1, buttonY, sidebarWidth, 1, " ")
             gpu.set(3, buttonY, btn.icon .. " " .. btn.text)
-            
-            -- Сохраняем позицию для обработки кликов
-            buttonPositions[btn.id] = {
-                x1 = 1, y1 = buttonY,
-                x2 = sidebarWidth - 1, y2 = buttonY
-            }
-            
-            -- Подсказка при наведении
-            if isHover and btn.hint then
-                gpu.setForeground(theme.info)
-                gpu.set(sidebarWidth + 2, buttonY, "→ " .. btn.hint)
-            end
-            
             buttonY = buttonY + 2
         end
         
-        -- Основная область контента
+        -- Основная область
         gpu.setBackground(theme.background)
         gpu.setForeground(theme.text)
         
         if mode == "files" then
-            drawFileManager()
+            local startX = sidebarWidth + 3
+            local availableHeight = maxHeight - 7
+            
+            gpu.setForeground(theme.accent)
+            gpu.set(startX, 5, "ИМЯ")
+            gpu.set(startX + 35, 5, "ТИП")
+            gpu.set(startX + 45, 5, "РАЗМЕР")
+            
+            gpu.setForeground(theme.text)
+            gpu.set(startX, 6, string.rep("─", maxWidth - startX - 2))
+            
+            local y = 7
+            for i = 1, math.min(#files - scrollOffset, availableHeight) do
+                local idx = i + scrollOffset
+                local file = files[idx]
+                
+                if file then
+                    if idx == selected then
+                        gpu.setBackground(theme.highlight)
+                        gpu.setForeground(0x000000)
+                    else
+                        gpu.setBackground(theme.background)
+                        gpu.setForeground(file.isDir and theme.accent or theme.text)
+                    end
+                    
+                    gpu.fill(startX, y, maxWidth - startX - 2, 1, " ")
+                    
+                    local name = file.name
+                    if file.isDir then name = name .. "/" end
+                    if #name > 30 then name = name:sub(1, 27) .. "..." end
+                    
+                    gpu.set(startX, y, name)
+                    gpu.set(startX + 35, y, file.isDir and "Папка" or "Файл")
+                    gpu.set(startX + 45, y, file.size)
+                    
+                    local icon = file.isDir and "📁" or "📄"
+                    gpu.set(startX - 2, y, icon)
+                    
+                    y = y + 1
+                end
+            end
+            
+            gpu.setBackground(theme.background)
+            gpu.setForeground(theme.info)
+            gpu.set(startX, maxHeight - 2, "Файлов: " .. #files .. " | Выбрано: " .. selected)
+            
         elseif mode == "apps" then
-            drawApps()
+            local startX = sidebarWidth + 3
+            local y = 5
+            
+            -- Проверяем какие приложения есть
+            local availableApps = {}
+            for _, app in ipairs(appsToDownload) do
+                if fs.exists("/apps/" .. app.filename) then
+                    table.insert(availableApps, app)
+                end
+            end
+            
+            if #availableApps == 0 then
+                gpu.set(centerX - 20, centerY - 2, "Приложения не загружены")
+                gpu.set(centerX - 25, centerY, "Запустите систему с интернет-картой")
+                gpu.set(centerX - 20, centerY + 2, "для автоматической загрузки приложений")
+            else
+                gpu.setForeground(theme.accent)
+                gpu.set(startX, 5, "ДОСТУПНЫЕ ПРИЛОЖЕНИЯ:")
+                gpu.set(startX, 6, string.rep("─", maxWidth - startX - 3))
+                
+                y = 8
+                for i, app in ipairs(availableApps) do
+                    gpu.setForeground(theme.text)
+                    gpu.set(startX, y, app.icon .. " " .. app.name .. " (клавиша " .. app.key .. ")")
+                    gpu.set(startX + 30, y, "[Запустить]")
+                    y = y + 2
+                end
+            end
+            
         elseif mode == "console" then
-            drawConsole()
+            local startX = sidebarWidth + 3
+            gpu.set(startX, 5, "Введите 'help' для списка команд")
+            gpu.set(startX, 6, "> ")
+            
         elseif mode == "info" then
-            drawSystemInfo()
+            local startX = sidebarWidth + 3
+            gpu.setForeground(theme.accent)
+            gpu.set(startX, 5, "ИНФОРМАЦИЯ О СИСТЕМЕ")
+            gpu.set(startX, 6, string.rep("─", maxWidth - startX - 3))
+            
+            local info = {
+                "Версия: Asmelit OS 4.1",
+                "Память: " .. computer.freeMemory() .. "/" .. computer.totalMemory() .. " байт",
+                "Время работы: " .. string.format("%.1f мин", (computer.uptime() - startTime) / 60),
+                "Приложений загружено: " .. #appsToDownload
+            }
+            
+            for i, line in ipairs(info) do
+                gpu.setForeground(theme.text)
+                gpu.set(startX, 8 + i, line)
+            end
         end
         
-        -- Нижняя панель с подсказками
+        -- Нижняя панель
         gpu.setBackground(theme.header)
         gpu.setForeground(theme.text)
         gpu.fill(1, maxHeight, maxWidth, 1, " ")
         
-        local hints = ""
+        local hint = ""
         if mode == "files" then
-            hints = "↑↓: Навигация | Enter: Открыть | F2: Новый файл | Del: Удалить | ESC: Выход"
+            hint = "↑↓ - Выбрать | Enter - Открыть | ESC - Выход"
         elseif mode == "apps" then
-            hints = "1-6: Запуск приложений | ESC: Назад"
-        elseif mode == "console" then
-            hints = "Введите команду | Enter: Выполнить | ESC: Назад"
+            hint = "Выберите приложение для запуска | ESC - Назад"
         else
-            hints = "ESC: Назад в файлы | F5: Обновить"
+            hint = "ESC - Назад в файлы"
         end
         
-        gpu.set(3, maxHeight, "💡 " .. hints)
-    end
-    
-    -- Файловый менеджер
-    function drawFileManager()
-        local startX = sidebarWidth + 3
-        local availableHeight = maxHeight - 7
-        local visibleFiles = math.min(#files - scrollOffset, availableHeight)
-        
-        -- Заголовки колонок
-        gpu.setForeground(theme.accent)
-        gpu.set(startX, 5, "ИМЯ")
-        gpu.set(startX + 35, 5, "ТИП")
-        gpu.set(startX + 45, 5, "РАЗМЕР")
-        
-        -- Разделитель
-        gpu.setForeground(theme.border)
-        gpu.set(startX, 6, string.rep("─", maxWidth - startX - 2))
-        
-        -- Список файлов
-        local y = 7
-        for i = 1, visibleFiles do
-            local fileIndex = i + scrollOffset
-            local file = files[fileIndex]
-            
-            if file then
-                -- Выделение текущего файла
-                if fileIndex == selected then
-                    gpu.setBackground(theme.highlight)
-                    gpu.setForeground(0x000000)
-                else
-                    gpu.setBackground(theme.background)
-                    gpu.setForeground(file.isDir and theme.accent or theme.text)
-                end
-                
-                -- Очистка строки
-                gpu.fill(startX, y, maxWidth - startX - 2, 1, " ")
-                
-                -- Имя файла
-                local displayName = file.name
-                if file.isDir then displayName = displayName .. "/" end
-                if #displayName > 30 then
-                    displayName = displayName:sub(1, 27) .. "..."
-                end
-                
-                gpu.set(startX, y, displayName)
-                
-                -- Тип
-                gpu.set(startX + 35, y, file.isDir and "Папка" or "Файл")
-                
-                -- Размер
-                gpu.set(startX + 45, y, file.size)
-                
-                -- Иконка
-                local icon = file.isDir and "📁" or "📄"
-                gpu.set(startX - 2, y, icon)
-                
-                y = y + 1
-            end
-        end
-        
-        -- Статусная строка
-        gpu.setBackground(theme.background)
-        gpu.setForeground(theme.info)
-        local status = string.format("Файлов: %d | Выбрано: %d", #files, selected)
-        if #files > visibleFiles then
-            status = status .. string.format(" | Прокрутка: %d-%d", scrollOffset + 1, scrollOffset + visibleFiles)
-        end
-        gpu.set(startX, maxHeight - 2, status)
-    end
-    
-    -- Экран приложений
-    function drawApps()
-        local startX = sidebarWidth + 3
-        gpu.setForeground(theme.accent)
-        gpu.set(startX, 5, "🚀 ДОСТУПНЫЕ ПРИЛОЖЕНИЯ")
-        gpu.set(startX, 6, string.rep("─", maxWidth - startX - 3))
-        
-        -- Проверяем какие приложения доступны
-        local availableApps = {}
-        for _, app in ipairs(appsToDownload) do
-            if fs.exists("/apps/" .. app.filename) then
-                table.insert(availableApps, app)
-            end
-        end
-        
-        if #availableApps == 0 then
-            gpu.setForeground(theme.warning)
-            gpu.set(centerX - 20, centerY - 2, "Приложения не загружены!")
-            gpu.set(centerX - 25, centerY, "Запустите систему с интернет-картой")
-            gpu.set(centerX - 20, centerY + 2, "для автоматической загрузки приложений")
-            return
-        end
-        
-        -- Отображаем доступные приложения
-        local x, y = startX, 8
-        local appWidth = 25
-        local appHeight = 6
-        
-        for i, app in ipairs(availableApps) do
-            if y + appHeight < maxHeight - 3 then
-                -- Цвет фона приложения
-                local color = 0x00AAFF
-                if i == 1 then color = 0x00FF88      -- Калькулятор - зеленый
-                elseif i == 2 then color = 0x00AAFF  -- Редактор - синий
-                elseif i == 3 then color = 0x55FFFF  -- Браузер - голубой
-                elseif i == 4 then color = 0xFFAA00  -- Монитор - оранжевый
-                elseif i == 5 then color = 0xFF55FF  -- Сапер - фиолетовый
-                elseif i == 6 then color = 0xFF5555 end -- Змейка - красный
-                
-                -- Фон приложения
-                gpu.setBackground(color)
-                gpu.setForeground(0x000000)
-                gpu.fill(x, y, appWidth, appHeight, " ")
-                
-                -- Рамка приложения
-                gpu.set(x, y, "┌" .. string.rep("─", appWidth - 2) .. "┐")
-                gpu.set(x, y + appHeight - 1, "└" .. string.rep("─", appWidth - 2) .. "┘")
-                for j = 1, appHeight - 2 do
-                    gpu.set(x, y + j, "│")
-                    gpu.set(x + appWidth - 1, y + j, "│")
-                end
-                
-                -- Название приложения
-                gpu.set(x + 2, y + 1, app.icon .. " " .. app.name)
-                
-                -- Горячая клавиша
-                gpu.set(x + 2, y + 2, "Клавиша: " .. app.key)
-                
-                -- Кнопка запуска
-                gpu.setBackground(0x000000)
-                gpu.setForeground(color)
-                gpu.fill(x + 2, y + appHeight - 2, 12, 1, " ")
-                gpu.set(x + 3, y + appHeight - 2, "▶ Запустить")
-                
-                x = x + appWidth + 2
-                if x + appWidth > maxWidth then
-                    x = startX
-                    y = y + appHeight + 2
-                end
-            end
-        end
-        
-        -- Подсказка по горячим клавишам
-        gpu.setBackground(theme.background)
-        gpu.setForeground(theme.info)
-        gpu.set(startX, maxHeight - 4, "Используйте цифры 1-6 для быстрого запуска приложений")
-    end
-    
-    -- Консоль
-    function drawConsole()
-        local startX = sidebarWidth + 3
-        gpu.setForeground(theme.accent)
-        gpu.set(startX, 5, "╔════════════════════════════════════════════════╗")
-        gpu.set(startX, 6, "║              КОНСОЛЬ ASMELIT OS               ║")
-        gpu.set(startX, 7, "╚════════════════════════════════════════════════╝")
-        
-        gpu.setForeground(theme.text)
-        gpu.set(startX, 9, "Текущая директория: " .. currentDir)
-        gpu.set(startX, 10, string.rep("─", maxWidth - startX - 3))
-        
-        -- Показываем историю логов
-        gpu.set(startX, 12, "Последние события системы:")
-        local y = 13
-        for i = math.max(1, #systemLog - 5), #systemLog do
-            if y < maxHeight - 5 then
-                gpu.set(startX + 2, y, "• " .. systemLog[i])
-                y = y + 1
-            end
-        end
-        
-        gpu.set(startX, maxHeight - 4, string.rep("═", maxWidth - startX - 3))
-        gpu.set(startX, maxHeight - 3, "> ")
-    end
-    
-    -- Информация о системе
-    function drawSystemInfo()
-        local startX = sidebarWidth + 3
-        gpu.setForeground(theme.accent)
-        gpu.set(startX, 5, "ℹ️ ИНФОРМАЦИЯ О СИСТЕМЕ")
-        gpu.set(startX, 6, string.rep("─", maxWidth - startX - 3))
-        
-        -- Основная информация
-        local infoLines = {
-            "Версия: Asmelit OS 4.0",
-            "Память: " .. computer.freeMemory() .. " / " .. computer.totalMemory() .. " байт",
-            "Время работы: " .. string.format("%.1f минут", (computer.uptime() - startTime) / 60),
-            "Логов в памяти: " .. #systemLog .. " записей",
-            "Экран: " .. maxWidth .. "x" .. maxHeight,
-            "Дисковое пространство:"
-        }
-        
-        -- Информация о дисках
-        local driveCount = 0
-        local totalSpace = 0
-        local usedSpace = 0
-        
-        for addr in component.list("drive") do
-            local proxy = component.proxy(addr)
-            if proxy then
-                driveCount = driveCount + 1
-                local capacity = proxy.capacity() or 0
-                local used = proxy.spaceUsed() or 0
-                totalSpace = totalSpace + capacity
-                usedSpace = usedSpace + used
-                
-                local free = capacity - used
-                local percent = capacity > 0 and math.floor((used / capacity) * 100) or 0
-                
-                table.insert(infoLines, string.format("  Диск %d: %dK / %dK (%d%% свободно)", 
-                    driveCount, math.floor(used/1024), math.floor(capacity/1024), 100-percent))
-            end
-        end
-        
-        if driveCount == 0 then
-            table.insert(infoLines, "  Диски не обнаружены")
-        end
-        
-        -- Энергия
-        if computer.maxEnergy() > 0 then
-            table.insert(infoLines, "")
-            table.insert(infoLines, "Энергия: " .. math.floor((computer.energy() / computer.maxEnergy()) * 100) .. "%")
-        end
-        
-        -- Отображение информации
-        local y = 8
-        for i, line in ipairs(infoLines) do
-            if y < maxHeight - 3 then
-                gpu.setForeground(theme.text)
-                gpu.set(startX, y, line)
-                y = y + 1
-            end
-        end
-        
-        -- График использования памяти (если есть место)
-        if y < maxHeight - 10 then
-            gpu.setForeground(theme.accent)
-            gpu.set(startX, y, "Использование памяти:")
-            y = y + 1
-            
-            local usedPercent = math.floor((1 - computer.freeMemory() / computer.totalMemory()) * 100)
-            local barWidth = 40
-            local barX = startX
-            
-            -- Фон графика
-            gpu.setBackground(theme.sidebar)
-            gpu.fill(barX, y, barWidth, 1, "█")
-            
-            -- Заполненная часть
-            local filledWidth = math.floor(barWidth * usedPercent / 100)
-            gpu.setBackground(theme.highlight)
-            gpu.fill(barX, y, filledWidth, 1, "█")
-            
-            -- Подпись
-            gpu.setBackground(theme.background)
-            gpu.setForeground(theme.text)
-            gpu.set(barX + barWidth + 2, y, string.format("%d%%", usedPercent))
-        end
+        gpu.set(3, maxHeight, hint)
     end
     
     -- Запуск приложения
@@ -904,21 +797,19 @@ function mainGUI()
             end
         else
             showMessage("Приложение не найдено!\nФайл: " .. appFilename .. "\n\nЗагрузите приложения через меню.", 
-                       theme.error, "Ошибка")
+                      theme.error, "Ошибка")
         end
     end
     
     -- Функция консоли
     local function runConsole()
         local consoleText = ""
-        local consoleHistory = {}
-        local historyIndex = 0
         
         while mode == "console" do
             drawInterface()
             
             local startX = sidebarWidth + 3
-            gpu.set(startX, maxHeight - 3, "> " .. consoleText .. "_")
+            gpu.set(startX, 6, "> " .. consoleText .. "_")
             
             local e = {event.pull()}
             
@@ -927,36 +818,31 @@ function mainGUI()
                 
                 if code == 28 then -- Enter
                     if #consoleText > 0 then
-                        -- Сохраняем в историю
-                        table.insert(consoleHistory, consoleText)
-                        historyIndex = #consoleHistory + 1
-                        
                         local cmd = consoleText:lower()
                         
-                        -- Обработка команд
                         if cmd == "help" then
                             showMessage([[
 Доступные команды:
-help     - эта справка
-clear    - очистить экран
-ls       - список файлов
-cd [dir] - сменить директорию
-cat [file] - показать файл
-run [file] - запустить программу
-sysinfo  - информация о системе
+help     - справка
+clear    - очистить
+ls       - файлы
+cd [dir] - смена папки
+cat [file] - просмотр
+run [file] - запуск
+sysinfo  - информация
 reboot   - перезагрузка
-exit     - выход из консоли]], theme.text, "Справка по командам")
+exit     - выход]], theme.text, "Справка")
                             
                         elseif cmd == "clear" then
                             consoleText = ""
                             
                         elseif cmd == "ls" then
                             refreshFiles()
-                            local fileList = ""
+                            local list = ""
                             for _, file in ipairs(files) do
-                                fileList = fileList .. (file.isDir and file.name .. "/\n" or file.name .. "\n")
+                                list = list .. (file.isDir and file.name .. "/\n" or file.name .. "\n")
                             end
-                            showMessage("Файлы в " .. currentDir .. ":\n" .. fileList, theme.text, "Список файлов")
+                            showMessage("Файлы в " .. currentDir .. ":\n" .. list, theme.text, "Список файлов")
                             
                         elseif cmd:sub(1,3) == "cd " then
                             local newDir = cmd:sub(4)
@@ -1003,20 +889,13 @@ exit     - выход из консоли]], theme.text, "Справка по к
                             
                         elseif cmd == "sysinfo" then
                             local info = string.format(
-                                "Память: %d/%d байт (свободно: %d)\n" ..
-                                "Время работы: %.1f минут\n" ..
-                                "Энергия: %s",
+                                "Память: %d/%d байт\nВремя: %.1f мин",
                                 computer.freeMemory(), computer.totalMemory(),
-                                computer.totalMemory() - computer.freeMemory(),
-                                (computer.uptime() - startTime) / 60,
-                                computer.maxEnergy() > 0 and 
-                                math.floor((computer.energy() / computer.maxEnergy()) * 100) .. "%" or "N/A"
+                                (computer.uptime() - startTime) / 60
                             )
                             showMessage(info, theme.text, "Информация о системе")
                             
                         elseif cmd == "reboot" then
-                            showMessage("Перезагрузка системы...", theme.info, "Перезагрузка")
-                            os.sleep(1)
                             computer.shutdown(true)
                             
                         elseif cmd == "exit" then
@@ -1024,8 +903,7 @@ exit     - выход из консоли]], theme.text, "Справка по к
                             return
                             
                         else
-                            showMessage("Неизвестная команда: " .. cmd .. "\nВведите 'help' для списка команд", 
-                                      theme.warning, "Ошибка")
+                            showMessage("Неизвестная команда: " .. cmd, theme.warning, "Ошибка")
                         end
                         
                         consoleText = ""
@@ -1036,23 +914,11 @@ exit     - выход из консоли]], theme.text, "Справка по к
                         consoleText = consoleText:sub(1, -2)
                     end
                     
-                elseif code == 200 then -- Up
-                    if historyIndex > 1 then
-                        historyIndex = historyIndex - 1
-                        consoleText = consoleHistory[historyIndex] or ""
-                    end
-                    
-                elseif code == 208 then -- Down
-                    if historyIndex < #consoleHistory then
-                        historyIndex = historyIndex + 1
-                        consoleText = consoleHistory[historyIndex] or ""
-                    end
-                    
                 elseif code == 1 then -- ESC
                     mode = "files"
                     return
                     
-                elseif char and char > 0 and char < 256 then -- Безопасная проверка
+                elseif char and char > 0 and char < 256 then
                     consoleText = consoleText .. string.char(char)
                 end
             end
@@ -1145,8 +1011,7 @@ exit     - выход из консоли]], theme.text, "Справка по к
                 -- Глобальные горячие клавиши
                 if code == 1 then -- ESC
                     if mode == "files" then
-                        local choice = showMessage("Завершить работу Asmelit OS?", theme.warning, "Выход из системы")
-                        if choice then
+                        if showYesNoMessage("Завершить работу Asmelit OS?", "Выход из системы") then
                             showMessage("Завершение работы...", theme.info, "Asmelit OS")
                             os.sleep(1)
                             computer.shutdown()
@@ -1177,64 +1042,20 @@ exit     - выход из консоли]], theme.text, "Справка по к
             elseif e[1] == "touch" then
                 local x, y = e[3], e[4]
                 
-                -- Клик по сайдбару
-                for btnId, pos in pairs(buttonPositions) do
-                    if x >= pos.x1 and x <= pos.x2 and y >= pos.y1 and y <= pos.y2 then
-                        mode = btnId
-                        if mode == "console" then
-                            runConsole()
-                        end
-                        break
-                    end
-                end
-                
-                -- Клик по приложениям (в режиме приложений)
-                if mode == "apps" then
-                    local startX = sidebarWidth + 3
-                    local startY = 8
-                    local appWidth = 25
-                    local appHeight = 6
-                    
-                    local currentX, currentY = startX, startY
-                    local appIndex = 1
-                    
-                    -- Проверяем все приложения
-                    for _, app in ipairs(appsToDownload) do
-                        if fs.exists("/apps/" .. app.filename) then
-                            if x >= currentX and x < currentX + appWidth and
-                               y >= currentY and y < currentY + appHeight then
-                                runApp(app.filename)
-                                break
-                            end
-                            
-                            currentX = currentX + appWidth + 2
-                            if currentX + appWidth > maxWidth then
-                                currentX = startX
-                                currentY = currentY + appHeight + 2
+                -- Клик по сайдбару (приблизительная позиция)
+                if x >= 1 and x <= sidebarWidth then
+                    if y >= 5 and y <= 5 + (#sidebarButtons * 2) then
+                        local buttonIndex = math.floor((y - 5) / 2) + 1
+                        if buttonIndex >= 1 and buttonIndex <= #sidebarButtons then
+                            mode = sidebarButtons[buttonIndex].id
+                            if mode == "console" then
+                                runConsole()
                             end
                         end
-                        appIndex = appIndex + 1
                     end
                 end
                 
                 break
-                
-            elseif e[1] == "scroll" then
-                if mode == "files" then
-                    local delta = e[5]
-                    if delta > 0 and scrollOffset > 0 then
-                        scrollOffset = scrollOffset - 1
-                        if selected > scrollOffset + 1 then
-                            selected = math.max(1, selected - 1)
-                        end
-                    elseif delta < 0 and scrollOffset + (maxHeight - 8) < #files then
-                        scrollOffset = scrollOffset + 1
-                        if selected < scrollOffset + (maxHeight - 9) then
-                            selected = math.min(#files, selected + 1)
-                        end
-                    end
-                    break
-                end
             end
         end
     end
@@ -1243,7 +1064,7 @@ end
 -- =====================================================
 -- ТОЧКА ВХОДА СИСТЕМЫ
 -- =====================================================
-log("=== Asmelit OS v4.0 - Инициализация системы ===")
+log("=== Asmelit OS v4.1 - Инициализация системы ===")
 
 -- Проверяем достаточно ли памяти
 if computer.freeMemory() < 2048 then
@@ -1273,6 +1094,6 @@ if not mainOk then
     computer.shutdown(true)
 end
 
--- Если mainGUI завершился (чего не должно быть в нормальных условиях)
+-- Если mainGUI завершился
 showMessage("Система завершила работу.", theme.info, "Asmelit OS")
 computer.shutdown()
